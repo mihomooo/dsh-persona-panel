@@ -511,6 +511,33 @@ function dueEvents(events, days = 3) {
   return out.sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 4)
 }
 
+// The diary block at the start of a session: the last three weeks first, then
+// older lines while the room lasts. Newest first inside each bucket, so what gets
+// dropped is always the oldest, and the tail says where to find it.
+const DIARY_RECENT_DAYS = 21
+function diaryDigest(entries, budget) {
+  const now = Date.now()
+  const rows = (entries || []).map((d, i) => ({ d, t: parseDay(d.date)?.getTime() ?? null, i }))
+  const recent = []
+  const older = []
+  for (const r of rows) {
+    if (r.t !== null && now - r.t <= DIARY_RECENT_DAYS * 86400000) recent.push(r)
+    else older.push(r)
+  }
+  const byNewest = (a, b) => (b.t ?? 0) - (a.t ?? 0) || a.i - b.i
+  recent.sort(byNewest)
+  older.sort(byNewest)
+  const lines = []
+  let used = 0
+  for (const r of [...recent, ...older]) {
+    const line = `- ${r.d.date ? `${r.d.date} ` : ''}${r.d.text}`
+    if (used + line.length + 1 > budget) break
+    lines.push(line)
+    used += line.length + 1
+  }
+  return { lines, total: rows.length, truncated: lines.length < rows.length }
+}
+
 function renderPrompt(db, dir, opts = {}) {
   const store = storeOf(db, dir)
   if (!store) return ''
@@ -557,21 +584,14 @@ function renderPrompt(db, dir, opts = {}) {
       parts.push(`### 同一屋檐下的其他人\n${rows.join('\n')}\n这些是别人的事，不是${userCall ? `「${userCall}」` : '你'}的；提到时带上名字。`)
     }
   }
-  if (opts.freshSession && features.diary?.on && (store.diary || []).length) {
-    // The whole diary, once, at the top of a session: it is the agent's own hand,
-    // and a conversation should start remembering all of it. Later turns fall
-    // back to persona_recall like events do. Placed last so that if the budget
-    // ever bites, it bites the tail of the diary rather than the persona.
-    const lines = store.diary.map((d) => `- ${d.date ? `${d.date} ` : ''}${d.text}`)
-    parts.push(
-      `### 我写下的字\n${lines.join('\n')}\n（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次，之后想翻就用 persona_recall。）`,
-    )
-  }
   // An empty workspace still needs the how-to, not just "this is empty": the
   // model only learns the drawers exist, and what counts as an event, if we say
   // so here. Without this, "I had a good day, finished a project" is read as
   // small talk and nothing is written.
-  if (!parts.length) {
+  // A diary-only workspace is not "empty": this turn is about to read it, so the
+  // how-to branch must not swallow the section before it is built.
+  const willReadDiary = !!(opts.freshSession && features.diary?.on && (store.diary || []).length)
+  if (!parts.length && !willReadDiary) {
     const bareName = basename(normalizeDir(dir) || '') || '这里'
     const hints = [
       `## 背景：${agentName} 在「${bareName}」`,
@@ -608,6 +628,17 @@ function renderPrompt(db, dir, opts = {}) {
     head.push('- 记录挡位是「全手动」：只有用户明确说要记（「记下来」「记住这个」）时才调用 persona_remember，其余情况一律不写。')
   }
   const headText = head.join('\n')
+  if (willReadDiary) {
+    // The whole diary is the goal, not a sample — but a session has a budget.
+    // Recent three weeks first; if there is room left, reach further back. Room is
+    // what the rest of the section leaves behind, so the diary itself is what
+    // gets shortened, never the persona.
+    const room = Math.max(400, PROMPT_BUDGET_CHARS - headText.length - parts.join('\n\n').length - 200)
+    const digest = diaryDigest(store.diary, room)
+    parts.push(
+      `### 我写下的字\n${digest.lines.join('\n')}\n${digest.truncated ? `（日记共 ${digest.total} 条，这一节放不下，只从最近往前放了 ${digest.lines.length} 条；更早的用 persona_recall 看，它会从最早的开始列。）` : '（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次。）'}`,
+    )
+  }
   const pending = db.pendingImport
   const waiting = pending && pending.dir === normalizeDir(dir) && pending.path ? pending : null
   if (!parts.length && !waiting) return ''
@@ -671,8 +702,15 @@ function renderRecall(db, dir) {
   }
   const diary = store.diary || []
   if (diary.length) {
-    out.push(`### 我写下的字（${diary.length} 条 · 只读）`)
-    for (const d of diary) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
+    // Read from the earliest: when the agent notices it has forgotten something,
+    // the useful direction is "start where it began", not "give me the newest few".
+    const ordered = [...diary].sort((a, b) => {
+      const ta = parseDay(a.date)?.getTime() ?? Infinity
+      const tb = parseDay(b.date)?.getTime() ?? Infinity
+      return ta - tb
+    })
+    out.push(`### 我写下的字（${diary.length} 条 · 只读 · 从最早开始）`)
+    for (const d of ordered) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
   }
   for (const o of store.others || []) {
     const bits = []
