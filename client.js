@@ -1164,7 +1164,7 @@ window.__ModuleLoader__.load({
             ? h(
                 'div',
                 { style: { border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8, padding: 8, marginTop: 6 } },
-                h('div', { className: 'pp-mini' }, `读了 ${sess.sessions} 个会话、${sess.turns} 轮对话、${sess.chars} 字`),
+                h('div', { className: 'pp-mini' }, `读了 ${sess.sessions}${sess.total && sess.total > sess.sessions ? ` / 共 ${sess.total}` : ''} 个会话、${sess.turns} 轮对话、${sess.chars} 字`),
                 h('div', { className: 'pp-mini', style: { wordBreak: 'break-all' } }, sess.path || '(没能落盘)'),
                 h('div', { className: 'pp-hint', style: { marginTop: 4 } }, sess.queued ? (sess.kick && sess.kick.ok ? '已经叫醒这个工作区的会话：它这一轮就会读这份转写，拆完写进来。' : `已排好，但没能当场叫醒会话（${(sess.kick && sess.kick.why) || '未知原因'}）——你下次说话时我会先读它。`) : '没找到可读的会话。'),
                 h('div', { style: { maxHeight: 120, overflow: 'auto', marginTop: 6, fontSize: 11, color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'pre-wrap' } }, (sess.preview || '').slice(0, 900)),

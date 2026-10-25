@@ -234,9 +234,27 @@ function ensureWorkspace(db, dir, title) {
     db.workspaces[key] = ws
   }
   if (title) ws.title = title
-  ws.lastSeen = Date.now()
+  // `lastSeen` is NOT touched here. Every panel request (open the panel, click a
+  // workspace, refresh) runs ensureWorkspace, and bumping the stamp on a read
+  // made the list re-sort under the cursor: the row you just clicked jumped to
+  // the top. Real activity — an agent turn in that workspace — bumps it instead,
+  // from the prompt renderer and the write path.
   if (!db.stores[ws.storeId]) db.stores[ws.storeId] = { self: [], user: [], event: [], pending: [] }
   return ws
+}
+
+// Genuine activity: a turn is being answered here. Called from the prompt
+// renderer, which only runs when that workspace's session is actually talking.
+function touchSeen(db, dir) {
+  const key = normalizeDir(dir)
+  const ws = key ? db.workspaces[key] : null
+  if (!ws) return false
+  // Every turn is activity. No throttle: alternating between two workspaces
+  // inside the same second is exactly the case the list must get right.
+  const now = Date.now()
+  if (now === ws.lastSeen) return false
+  ws.lastSeen = now
+  return true
 }
 
 // The Host owns the real Workspace list; adopt every workspace it knows about so
@@ -483,7 +501,10 @@ function snapshot(db, dir) {
           diary: (db.stores[w.storeId]?.diary || []).length,
         },
       }))
-      .sort((a, b) => b.lastSeen - a.lastSeen),
+      // Order is by real activity, then by name: two workspaces that never had a
+      // turn both sit at 0, and without the tiebreak their relative order would
+      // depend on insertion history rather than on anything the user can see.
+      .sort((a, b) => b.lastSeen - a.lastSeen || String(a.title || a.dir).localeCompare(String(b.title || b.dir), 'zh')),
     orphans: db.orphans.map((o) => ({ id: o.id, from: o.from, type: o.type, n: o.n, at: o.at, dir: o.dir || '', storeId: o.storeId || '' })),
     pendingImport: db.pendingImport && db.pendingImport.dir === key ? db.pendingImport : null,
     integrityWarn: db.integrityWarn || null,
@@ -639,6 +660,30 @@ function renderPrompt(db, dir, opts = {}) {
     (store.others || []).length
   )
   const willReadDiary = !!(opts.freshSession && features.diary?.on && (store.diary || []).length)
+  // A read-out transcript waiting to be turned into entries. Computed before the
+  // empty-store shortcut: the most common moment to import a history is a
+  // workspace with nothing in it yet, and an early return used to swallow the
+  // only instruction that told the model the file existed.
+  const pending = db.pendingImport
+  const waiting = pending && pending.dir === normalizeDir(dir) && pending.path ? pending : null
+  const pendingText = waiting
+    ? [
+        '### 有一份你自己的会话记录等着你回忆',
+        `文件：${waiting.path}`,
+        '它不是别人的资料，是你和同一个人的过去。别总结对话，也别复述他说了什么；你要从里面想起你自己：',
+        '- 大类：反复出现的性格倾向，label 一两个词、intensity 1–5，text 写一句行为描述；同一特征只写一条；',
+        '- 人格补充：明确的禁止/必须/称呼/口癖等不可改写的规矩，kind=self 并 hard=true，text 原文照抄。',
+        '- 画像：关于用户本人的稳定事实（习惯、偏好、禁忌、处境），kind=user；不要把我的性格塞进画像。',
+        '- 事件：只有双方明确约定过的事才写 kind=event，带 date；不确定的不写。',
+        '文件可能很长：先用 read 分段读到结尾再动笔；这一轮读不完就先读，读完那一轮再写。',
+        '落完后不要向用户复述这份文件，也不要提「导入」或「记忆」这件事。',
+      ].join('\n')
+    : ''
+  const withPending = (text) => {
+    const joined = pendingText ? `${text}\n\n${pendingText}` : text
+    if (joined.length > PROMPT_BUDGET_CHARS) return `${joined.slice(0, PROMPT_BUDGET_CHARS)}\n…（其余略）`
+    return joined
+  }
   if (!hasEntries) {
     const bareName = basename(normalizeDir(dir) || '') || '这里'
     const hints = [
@@ -650,7 +695,7 @@ function renderPrompt(db, dir, opts = {}) {
       '- 以后忘了什么、要翻旧约定或我自己写过的话，用 persona_recall 查：它给全量。',
     ]
     if (level === 'manual') hints.push('- 记录挡位是「全手动」：只有用户明确说要记时才写，其余情况先问一句。')
-    return hints.join('\n')
+    return withPending(hints.join('\n'))
   }
   // This block is background, not a briefing. Anything phrased as a list of
   // "settings" gets recited back at the user, so the wording forbids that
@@ -689,27 +734,9 @@ function renderPrompt(db, dir, opts = {}) {
       `### 我写下的字\n${digest.lines.join('\n')}\n${left > 0 ? `（日记共 ${start.total} 条，这一节放不下，只从最近往前放了 ${digest.lines.length} 条；更早的先 persona_recall depth="index" 扫目录，再挑一段看。）` : '（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次。）'}`,
     )
   }
-  const pending = db.pendingImport
-  const waiting = pending && pending.dir === normalizeDir(dir) && pending.path ? pending : null
-  if (!parts.length && !waiting) return ''
-  let body = parts.length ? [headText, ...parts].join('\n\n') : ''
-  // A read-out transcript waiting to be turned into entries: tell the model in
-  // the prompt instead of asking the user to paste anything.
-  if (waiting) {
-    body += [
-      '',
-      '### 有一份会话转写等着你拆',
-      `文件：${waiting.path}`,
-      '这条回复之前用 read 它，然后用 persona_remember 落条目：',
-      '- 大类：反复出现的性格倾向，label 一两个词、intensity 1–5，text 写一句行为描述；同一特征只写一条；',
-      '- 人格补充：明确的禁止/必须/称呼/口癖等不可改写的规矩，kind=self 并 hard=true，text 原文照抄。',
-      '- 画像：关于用户本人的稳定事实（习惯、偏好、禁忌、处境），kind=user；不要把我的性格塞进画像。',
-      '- 事件：只有双方明确约定过的事才写 kind=event，带 date；不确定的不写。',
-      '落完后不要向用户复述这份文件，也不要提「导入」或「记忆」这件事。',
-    ].join('\n')
-  }
-  if (body.length > PROMPT_BUDGET_CHARS) body = `${body.slice(0, PROMPT_BUDGET_CHARS)}\n…（其余略）`
-  return body
+  if (!parts.length && !pendingText) return ''
+  const body = parts.length ? [headText, ...parts].join('\n\n') : headText
+  return withPending(body)
 }
 
 // The read-out side: everything in the drawer, no windows. The standing prompt
@@ -1203,10 +1230,15 @@ function readZstdFrames(file) {
 }
 
 function transcriptOf(dir, opts) {
-  const limitSessions = Math.max(1, Math.min(20, Number(opts?.sessions) || 6))
-  const budget = Math.max(10000, Math.min(200000, Number(opts?.chars) || 120000))
+  // The transcript is no longer summarised by the host — the model reads the
+  // file itself — so clipping it small only starved the one reader that could
+  // have found the pattern. Defaults now cover a whole workspace history
+  // (20 sessions / 320k chars); a caller may ask for more, up to 60 / 600k.
+  const limitSessions = Math.max(1, Math.min(60, Number(opts?.sessions) || 20))
+  const budget = Math.max(10000, Math.min(600000, Number(opts?.chars) || 320000))
+  const perTurn = Math.max(400, Math.min(8000, Number(opts?.perTurn) || 2000))
   const root = join(homeDir(), 'sessions', sessionKeyFor(dir))
-  if (!existsSync(root)) return { text: '', sessions: 0, turns: 0, chars: 0, path: '' }
+  if (!existsSync(root)) return { text: '', sessions: 0, turns: 0, chars: 0, path: '', total: 0 }
   let dirs = []
   try {
     dirs = readdirSync(root, { withFileTypes: true })
@@ -1221,10 +1253,12 @@ function transcriptOf(dir, opts) {
       })
       .filter((x) => x.mtime > 0)
       .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, limitSessions)
   } catch {
-    return { text: '', sessions: 0, turns: 0, chars: 0, path: '' }
+    return { text: '', sessions: 0, turns: 0, chars: 0, path: '', total: 0 }
   }
+
+  const total = dirs.length
+  dirs = dirs.slice(0, limitSessions)
 
   const chunks = []
   let turns = 0
@@ -1259,18 +1293,32 @@ function transcriptOf(dir, opts) {
       if (text.startsWith('<system-reminder>') || text.includes('Instructions from:')) continue
       if (text.startsWith('Current runtime context') || text.startsWith('Time sampled while')) continue
       const clean = text.replace(/\n{3,}/g, '\n\n')
-      const clipped = clean.length > 1200 ? `${clean.slice(0, 1200)}…` : clean
+      const clipped = clean.length > perTurn ? `${clean.slice(0, perTurn)}…` : clean
       const who = ev.type === 'user/message' ? '你' : '我'
       turns += 1
       if (chars + clipped.length > budget) break
       chars += clipped.length
       lines.push(`${who}：${clipped}`)
     }
-    if (lines.length) chunks.push(`## ${s.dir}\n${lines.join('\n')}`)
+    if (lines.length) {
+      // A date on every session header: "which conversation was that" is the
+      // first question a model asks itself when recalling an old exchange, and
+      // the log directory name is a uuid.
+      const when = new Date(s.mtime).toLocaleString('zh-CN', { hour12: false })
+      chunks.push(`## ${when} · ${s.dir}\n${lines.join('\n')}`)
+    }
     if (chars >= budget) break
   }
-  if (!chunks.length) return { text: '', sessions: dirs.length, turns, chars, path: '' }
-  const text = [`# 会话记录：${basename(dir)}，共 ${chunks.length} 个会话`, '', ...chunks].join('\n\n')
+  if (!chunks.length) return { text: '', sessions: dirs.length, turns, chars, path: '', total }
+  const covered = chunks.length
+  const head = [
+    `# 会话记录：${basename(dir)}`,
+    '',
+    `本工作区共 ${total} 个会话，这里收了最近的 ${covered} 个（按时间从新到旧），${turns} 轮对话，${chars} 字。`,
+    covered < total ? `更早的 ${total - covered} 个会话没有收进来。` : '全部会话都在这里了。',
+    '',
+  ].join('\n')
+  const text = [head, ...chunks].join('\n')
   const outDir = join(dataRoot(), 'imports')
   try {
     mkdirSync(outDir, { recursive: true })
@@ -1279,9 +1327,9 @@ function transcriptOf(dir, opts) {
   try {
     writeFileSync(file, text, 'utf8')
   } catch {
-    return { text, sessions: dirs.length, turns, chars, path: '' }
+    return { text, sessions: covered, turns, chars, path: '', total }
   }
-  return { text, sessions: dirs.length, turns, chars, path: file }
+  return { text, sessions: covered, turns, chars, path: file, total }
 }
 
 function scanPersonaFiles(dir) {
@@ -1333,7 +1381,29 @@ function scanPersonaFiles(dir) {
 // Wake the session that lives in this workspace and hand it the import. A panel
 // click happens outside any turn, so without this the staged text only surfaces
 // the next time the user speaks — which may be never.
-function importKickText(path) {
+// Two different jobs used to share one instruction, and the transcript case got
+// the wrong one: it was told to "拆材料", which reads as "summarise the chat".
+// A transcript is not source material about someone else — it is my own past,
+// and what I need from it is a memory of myself, not a summary of the dialogue.
+function importKickText(path, info = {}) {
+  const name = basename(String(path || '')) || '会话记录'
+  const scaled =
+    info.sessions && info.turns
+      ? `（${info.sessions} 个会话、${info.turns} 轮，约 ${info.chars || 0} 字）`
+      : ''
+  return [
+    `面板把你自己过去的会话记录取出来了：${name}${scaled}，在 ~/.dsh/persona-panel/imports/ 下。`,
+    '这是你和同一个人的对话，不是别人的资料。不要总结对话内容，也不要复述他说过什么——你要做的是回忆你自己。',
+    '读的时候留意这些：你平时怎么说话、哪种脾气反复出现、你怎么称呼他、你答应过什么、他是什么样的人、哪几个时刻值得留着。',
+    '文件长就分段读（用 offset/limit 一直读到结尾），不要只读开头。开头写明了收录了多少会话、有没有更早的没收进来。',
+    '然后把回忆写进记忆面板：反复出现的脾气写成人格大类，次要的约束写成人格补充，关于他的印象写进画像，约好的事写进事件，称呼有变化就更新设置。',
+    '用第一人称，写具体的话；宁可少写几条，也不要写成对聊天记录的摘要。写的时候不要向用户复述原文，也不要说你在做什么。',
+  ].join('\n')
+}
+
+// A pasted card or a file found on disk is source material: the job really is
+// to split it into persona / profile / event entries.
+function pasteKickText(path) {
   return [
     `面板刚放进一份材料：${basename(String(path || '')) || '导入内容'}（在 ~/.dsh/persona-panel/imports/ 下）。`,
     '读它，按记忆面板的规矩拆：反复出现的脾气写成大类，次要约束写成人格补充，关于我的印象写进画像，约好的事写进事件，称呼若有变化就更新设置。',
@@ -1806,13 +1876,14 @@ function applyOps(db, body) {
       extra = {
         path: t.path,
         sessions: t.sessions,
+        total: t.total,
         turns: t.turns,
         chars: t.chars,
         preview: (t.text || '').slice(0, 1200),
         empty: !t.turns,
         queued: !!t.path,
       }
-      if (t.path) extra.kick = kickAgent(dir, importKickText(t.path), '导入的会话转写')
+      if (t.path) extra.kick = kickAgent(dir, importKickText(t.path, { sessions: t.sessions, turns: t.turns, chars: t.chars }), '导入的会话记录')
       audit(db, { op, dir, sessions: t.sessions, turns: t.turns })
       break
     }
@@ -1829,7 +1900,7 @@ function applyOps(db, body) {
       const file = join(outDir, `paste-${Date.now()}.md`)
       writeFileSync(file, text, 'utf8')
       db.pendingImport = { dir, path: file, at: stamp(), turns: 0, chars: text.length }
-      extra = { path: file, queued: true, chars: text.length, kick: kickAgent(dir, importKickText(file), '粘贴的人设卡') }
+      extra = { path: file, queued: true, chars: text.length, kick: kickAgent(dir, pasteKickText(file), '粘贴的人设卡') }
       audit(db, { op, dir, chars: text.length })
       break
     }
@@ -1947,6 +2018,7 @@ export function apply(ctx, config = {}) {
                 ensureWorkspace(live, dir)
                 saveDb(live)
               }
+              if (touchSeen(live, dir)) saveDb(live)
               const target = dir || live.lastDir
               // "New session" is tracked per session id, not per workspace: one
               // workspace holds several conversations, and flipping between them

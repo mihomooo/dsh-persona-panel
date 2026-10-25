@@ -171,7 +171,7 @@ ok('stagePaste returns a path', typeof staged.body?.imported === 'string' || sta
 s = await snap(dirA)
 ok('pendingImport set', !!s.pendingImport)
 const promptWithImport = section.text({ agent: { session: { header: { cwd: dirA } } } })
-ok('prompt mentions the transcript', promptWithImport.includes('会话转写') || promptWithImport.includes('转写'))
+ok('prompt mentions the transcript', promptWithImport.includes('会话记录') || promptWithImport.includes('转写') || promptWithImport.includes('回忆'))
 
 // --- integrity + long text ------------------------------------------------
 await call({ op: 'acceptIntegrity' })
