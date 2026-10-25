@@ -616,14 +616,18 @@ function renderPrompt(db, dir, opts = {}) {
       parts.push(`### 同一屋檐下的其他人\n${rows.join('\n')}\n这些是别人的事，不是${userCall ? `「${userCall}」` : '你'}的；提到时带上名字。`)
     }
   }
-  // An empty workspace still needs the how-to, not just "this is empty": the
-  // model only learns the drawers exist, and what counts as an event, if we say
-  // so here. Without this, "I had a good day, finished a project" is read as
-  // small talk and nothing is written.
-  // A diary-only workspace is not "empty": this turn is about to read it, so the
-  // how-to branch must not swallow the section before it is built.
+  // "Empty" means no entries of any kind — a workspace whose only content is a
+  // diary (or events) must not be told it is empty just because this turn does
+  // not happen to read those drawers.
+  const hasEntries = !!(
+    (store.self || []).length ||
+    (store.user || []).length ||
+    (store.event || []).length ||
+    (store.diary || []).length ||
+    (store.others || []).length
+  )
   const willReadDiary = !!(opts.freshSession && features.diary?.on && (store.diary || []).length)
-  if (!parts.length && !willReadDiary) {
+  if (!hasEntries) {
     const bareName = basename(normalizeDir(dir) || '') || '这里'
     const hints = [
       `## 背景：${agentName} 在「${bareName}」`,
@@ -1984,7 +1988,7 @@ export function apply(ctx, config = {}) {
     register(
       textTool(
         'persona_recall',
-        'Read the full persistent memory for this workspace: every persona trait, every impression of the user, every event I kept, every diary line — nothing is left out, this is the drawer, not a summary. Use it when you notice you have forgotten something: an agreement from weeks ago, a name, what was decided — and before answering questions about the past. person_remember writes, this reads. Pass who="<name>" to read one other person\'s branch in a shared workspace (a QQ group bridged into one session).',
+        'Read the full persistent memory for this workspace: every persona trait, every impression of the user, every event I kept, every diary line — nothing is left out, this is the drawer, not a summary. Use it when you notice you have forgotten something: an agreement from weeks ago, a name, what was decided — and before answering questions about the past. persona_remember writes, this reads. Pass who="<name>" to read one other person\'s branch in a shared workspace (a QQ group bridged into one session).',
         {
           who: { type: 'string', description: 'Optional: read only this other person\'s branch (the name used in the group chat).' },
           depth: {
