@@ -851,6 +851,7 @@ window.__ModuleLoader__.load({
       const [agentName, setAgentName] = useState(s.agentName || '')
       const [userCall, setUserCall] = useState(s.userCall || '')
       const [feat, setFeat] = useState(JSON.parse(JSON.stringify(s.features)))
+      const [restoreId, setRestoreId] = useState(null)
       const lv = [
         ['manual', '全手动', '只有我说「记」才写'],
         ['half', '半自动', '画像自动 · 承诺问我'],
@@ -963,9 +964,30 @@ window.__ModuleLoader__.load({
                     'div',
                     { key: o.id, className: 'pp-row', style: { marginTop: 4 } },
                     h('span', { className: 'pp-grow' }, `${o.from} · ${o.type === 'archive' ? '归档' : '工作区'} · ${o.n} 条 · ${o.at}`),
+                    h('button', { className: 'pp-btn', onClick: () => setRestoreId(o.id) }, '找回…'),
                     h('button', { className: 'pp-btn', onClick: () => send({ op: 'purgeOrphan', id: o.id }) }, '永久删除'),
                   ),
                 ),
+                restoreId
+                  ? h(
+                      'div',
+                      { className: 'pp-hint', style: { marginTop: 6 } },
+                      '并回当前工作区；已有的条目不重复。',
+                      h(
+                        'button',
+                        {
+                          className: 'pp-btn',
+                          'data-primary': '1',
+                          style: { marginLeft: 8 },
+                          onClick: async () => {
+                            await send({ op: 'restoreArchive', id: restoreId })
+                            setRestoreId(null)
+                          },
+                        },
+                        '确认找回',
+                      ),
+                    )
+                  : null,
               )
             : null,
           h(

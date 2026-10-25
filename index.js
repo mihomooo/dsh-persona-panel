@@ -1647,11 +1647,17 @@ function applyOps(db, body) {
     case 'restoreArchive': {
       const orphan = db.orphans.find((o) => o.id === body.id)
       if (orphan && store && orphan.snap) {
-        store.self = orphan.snap.self || []
-        store.user = orphan.snap.user || []
-        store.event = orphan.snap.event || []
+        // Merge instead of replace: archiving is meant to be undoable, and the
+        // workspace may have collected new entries since. Same id wins once.
+        const mergeById = (incoming, current) => {
+          const seen = new Set((current || []).map((x) => x.id))
+          return [...(current || []), ...(incoming || []).filter((x) => !seen.has(x.id))]
+        }
+        store.self = mergeById(orphan.snap.self, store.self)
+        store.user = mergeById(orphan.snap.user, store.user)
+        store.event = mergeById(orphan.snap.event, store.event)
         db.orphans = db.orphans.filter((o) => o.id !== body.id)
-        audit(db, { op, dir, id: body.id })
+        audit(db, { op, dir, id: body.id, n: (orphan.snap.self || []).length + (orphan.snap.user || []).length + (orphan.snap.event || []).length })
       }
       break
     }
