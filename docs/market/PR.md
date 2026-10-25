@@ -2,10 +2,10 @@
 
 前置：仓库创建满 1 天 → 最早 `2026-10-26 15:23 +08` 之后提交。
 
-## 步骤 0：Release 已就绪（2026-10-25 完成，0.5.1 为 latest）
+## 步骤 0：Release 已就绪（2026-10-25 完成，0.5.2 为 latest）
 
-[v0.5.1](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.5.1) 已发布为 latest，
-附件 `dsh-persona-panel.tgz`（128,516 字节，SHA-256 `da058df1…35a6f`，0.5.1 内容）。
+[v0.5.2](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.5.2) 已发布为 latest，
+附件 `dsh-persona-panel.tgz`（130,205 字节，SHA-256 `4d9056195826f702c27c51bea0d2bba134c158dd04a38dae3d24c34bb60e525b`，0.5.2 内容）。
 市场条目里的 `tarball`（`releases/latest/download/dsh-persona-panel.tgz`）现在指向它；条目写 `latest`
 就是让包跟着最新版本走，以后发新版不必改条目。发新版前先确认 latest 已经挪过去，再提 PR。
 
