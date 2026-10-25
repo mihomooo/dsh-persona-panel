@@ -511,31 +511,56 @@ function dueEvents(events, days = 3) {
   return out.sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 4)
 }
 
-// The diary block at the start of a session: the last three weeks first, then
-// older lines while the room lasts. Newest first inside each bucket, so what gets
-// dropped is always the oldest, and the tail says where to find it.
+// What a session opens with. Persona and impression are always whole; events and
+// diary are windows, because they grow without bound and a session cannot start by
+// paying for all of it.
+//
+// Diary: last three weeks, or the newest 21 lines if the last three weeks are
+// thin — a quiet month should not open with an empty diary.
 const DIARY_RECENT_DAYS = 21
-function diaryDigest(entries, budget) {
+const DIARY_START_ENTRIES = 21
+function diaryStartup(entries) {
   const now = Date.now()
   const rows = (entries || []).map((d, i) => ({ d, t: parseDay(d.date)?.getTime() ?? null, i }))
-  const recent = []
-  const older = []
-  for (const r of rows) {
-    if (r.t !== null && now - r.t <= DIARY_RECENT_DAYS * 86400000) recent.push(r)
-    else older.push(r)
-  }
-  const byNewest = (a, b) => (b.t ?? 0) - (a.t ?? 0) || a.i - b.i
-  recent.sort(byNewest)
-  older.sort(byNewest)
+  rows.sort((a, b) => (b.t ?? 0) - (a.t ?? 0) || a.i - b.i)
+  const recent = rows.filter((r) => r.t !== null && now - r.t <= DIARY_RECENT_DAYS * 86400000)
+  const picked = recent.length >= DIARY_START_ENTRIES ? recent.slice(0, DIARY_START_ENTRIES) : rows.slice(0, DIARY_START_ENTRIES)
+  return { picked: picked.map((r) => r.d), total: rows.length }
+}
+
+// Events: the fuller the drawer, the smaller the share a session start reads —
+// 100% up to 8, 80% up to 20, 60% beyond. Starred first, then newest.
+function eventWindow(events) {
+  const n = (events || []).length
+  const share = n <= 8 ? 1 : n <= 20 ? 0.8 : 0.6
+  const take = Math.max(1, Math.ceil(n * share))
+  const starred = events.filter((e) => e.important)
+  const rest = events.filter((e) => !e.important)
+  return { picked: [...starred, ...rest].slice(0, take), total: n, take }
+}
+
+// Recall depth, applied to the diary only: shallow is the newest quarter, medium
+// the third quarter, deep the second one — a walk backwards through a long life.
+function diarySlice(list, depth) {
+  const n = list.length
+  if (!n) return []
+  if (depth === 'all' || (!depth && n <= 60)) return list
+  const take = Math.ceil(n * 0.25)
+  const start = depth === 'shallow' ? Math.ceil(n * 0.75) : depth === 'deep' ? Math.ceil(n * 0.25) : Math.ceil(n * 0.5)
+  return list.slice(start, start + take)
+}
+
+// Trim a prepared diary block to what the rest of the section leaves behind.
+function fitDiary(entries, budget) {
   const lines = []
   let used = 0
-  for (const r of [...recent, ...older]) {
-    const line = `- ${r.d.date ? `${r.d.date} ` : ''}${r.d.text}`
+  for (const d of entries) {
+    const line = `- ${d.date ? `${d.date} ` : ''}${d.text}`
     if (used + line.length + 1 > budget) break
     lines.push(line)
     used += line.length + 1
   }
-  return { lines, total: rows.length, truncated: lines.length < rows.length }
+  return { lines, truncated: lines.length < entries.length }
 }
 
 function renderPrompt(db, dir, opts = {}) {
@@ -561,13 +586,20 @@ function renderPrompt(db, dir, opts = {}) {
     parts.push(`### 我眼里的${userCall ? `「${userCall}」` : '你'}\n${store.user.map((u) => `- ${u.text}`).join('\n')}`)
   }
   if (features.event?.on && store.event.length) {
-    // Standing prompt carries only what is about to come due. The full list is
-    // one persona_recall away — see the head rules below.
-    const soon = dueEvents(store.event)
-    if (soon.length) {
-      parts.push(
-        `### 快到日子的事\n${soon.map((e) => `- ${e.date} ${e.text}`).join('\n')}\n到了就提一句，别等用户自己想起来。`,
-      )
+    // A session opens with a share of the event drawer (all of it while small),
+    // and later turns carry only what is about to come due.
+    if (opts.freshSession) {
+      const win = eventWindow(store.event)
+      const lines = win.picked.map((e) => `- ${e.important ? '★ ' : ''}${e.text}${e.date ? ` · ${e.date}` : ''}`)
+      const tail = win.take < win.total ? `（共 ${win.total} 条，这一节先放 ${win.take} 条；其余的忘了再查。）` : ''
+      parts.push(`### 我记着的事\n${lines.join('\n')}${tail ? `\n${tail}` : ''}`)
+    } else {
+      const soon = dueEvents(store.event)
+      if (soon.length) {
+        parts.push(
+          `### 快到日子的事\n${soon.map((e) => `- ${e.date} ${e.text}`).join('\n')}\n到了就提一句，别等用户自己想起来。`,
+        )
+      }
     }
   }
   // Other people stay out of the prompt entirely while the feature is off: the
@@ -634,9 +666,11 @@ function renderPrompt(db, dir, opts = {}) {
     // what the rest of the section leaves behind, so the diary itself is what
     // gets shortened, never the persona.
     const room = Math.max(400, PROMPT_BUDGET_CHARS - headText.length - parts.join('\n\n').length - 200)
-    const digest = diaryDigest(store.diary, room)
+    const start = diaryStartup(store.diary)
+    const digest = fitDiary(start.picked, room)
+    const left = start.total - digest.lines.length
     parts.push(
-      `### 我写下的字\n${digest.lines.join('\n')}\n${digest.truncated ? `（日记共 ${digest.total} 条，这一节放不下，只从最近往前放了 ${digest.lines.length} 条；更早的用 persona_recall 看，它会从最早的开始列。）` : '（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次。）'}`,
+      `### 我写下的字\n${digest.lines.join('\n')}\n${left > 0 ? `（日记共 ${start.total} 条，这一节放不下，只从最近往前放了 ${digest.lines.length} 条；更早的用 persona_recall 看，它从最早的开始列。）` : '（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次。）'}`,
     )
   }
   const pending = db.pendingImport
@@ -666,7 +700,7 @@ function renderPrompt(db, dir, opts = {}) {
 // carries the persona and the impression every turn; events and diary are meant
 // to be fetched when the agent notices a gap — "I forget what we agreed" is the
 // trigger, not a quota.
-function renderRecall(db, dir) {
+function renderRecall(db, dir, opts = {}) {
   const store = storeOf(db, dir)
   if (!store) return ''
   const { userCall, eventsCap } = settingsOf(db, dir)
@@ -709,8 +743,14 @@ function renderRecall(db, dir) {
       const tb = parseDay(b.date)?.getTime() ?? Infinity
       return ta - tb
     })
-    out.push(`### 我写下的字（${diary.length} 条 · 只读 · 从最早开始）`)
-    for (const d of ordered) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
+    const depth = opts.depth || (ordered.length > 60 ? 'medium' : 'all')
+    const picked = diarySlice(ordered, depth)
+    const label = depth === 'all' ? '全部' : depth === 'shallow' ? '最近四分之一' : depth === 'medium' ? '中间四分之一' : '较早四分之一'
+    out.push(`### 我写下的字（${picked.length}/${diary.length} 条 · ${label} · 只读）`)
+    for (const d of picked) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
+    if (picked.length < ordered.length) {
+      out.push(`（还有 ${ordered.length - picked.length} 条没列出来：换 depth 看别的段，要全部就用 depth="all"。）`)
+    }
   }
   for (const o of store.others || []) {
     const bits = []
@@ -1930,6 +1970,12 @@ export function apply(ctx, config = {}) {
         'Read the full persistent memory for this workspace: every persona trait, every impression of the user, every event I kept, every diary line — nothing is left out, this is the drawer, not a summary. Use it when you notice you have forgotten something: an agreement from weeks ago, a name, what was decided — and before answering questions about the past. person_remember writes, this reads. Pass who="<name>" to read one other person\'s branch in a shared workspace (a QQ group bridged into one session).',
         {
           who: { type: 'string', description: 'Optional: read only this other person\'s branch (the name used in the group chat).' },
+          depth: {
+            type: 'string',
+            enum: ['shallow', 'medium', 'deep', 'all'],
+            description:
+              'How far back to read the diary, oldest-third style: shallow = the newest quarter, medium = the middle, deep = the earlier quarter, all = every line. Use shallow when something from lately is missing, deep when reconstructing an older stretch. Other sections always come whole.',
+          },
         },
         [],
         (live, dir, args) => {
@@ -1943,7 +1989,7 @@ export function apply(ctx, config = {}) {
             for (const e of other.event || []) lines.push(`事：${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`)
             return { text: lines.length ? lines.join('\n') : `「${other.name}」还没有条目。` }
           }
-          const body = renderRecall(live, dir)
+          const body = renderRecall(live, dir, { depth: String(args?.depth || '') })
           return { text: body || '（这个工作区还没有记忆。空着也挺好。）' }
         },
       ),

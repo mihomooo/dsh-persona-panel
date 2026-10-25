@@ -90,10 +90,12 @@ await post({ op: 'markEvent', id: askedId, important: true })
 s = await snap()
 ok('star toggled', s.store.event.filter((e) => e.important).length === 2)
 
-// Events no longer ride in the standing prompt: it carries only what is about to
-// come due. The full drawer is the read side, and that must be complete.
+// A session opens with the event drawer (100% while it is small), and later turns
+// fall back to due dates only. The full drawer is what recall is for.
 const text = section.text({ agent: exec.agent })
-ok('prompt no longer lists events', !text.includes('第五件事'))
+ok('session start reads the events', text.includes('第五件事') && text.includes('★ 第五件事'))
+const later = section.text({ agent: exec.agent })
+ok('later turns do not re-list them', !later.includes('第一件事'))
 const recalled = (await tools.persona_recall.execute({}, exec)).text
 ok('recall has the starred event', recalled.includes('★ 第五件事'))
 ok('recall lists every event', ['第一件事', '第四件事', '第五件事'].every((t) => recalled.includes(t)))
