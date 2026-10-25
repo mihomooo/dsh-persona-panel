@@ -689,7 +689,7 @@ function renderPrompt(db, dir, opts = {}) {
       '- 用 persona_remember：我的脾气 kind=self（label 一两个词 + intensity 1–5）、对你的印象 kind=user、约定和值得记住的时刻 kind=event（尽量带 date）、我自己想留下的一句 kind=diary（只写自己的话，写完就不能改）、改名与称呼 kind=setting。',
       '- 「值得记住的时刻」不止是承诺：心情特别好的时候、完成了一件做了很久的事、定下的日子，都算。别只等一句正式的约定。',
       '- 工作上的事也记：项目推进、定下的方案、做完并验收的一段工作，eventKind=work。但踩过的坑、发现的漏洞、以后要避免的做法写进 AGENTS.md 或项目文档，不写进这里。',
-      '- 以后忘了什么、要翻旧约定或我自己写过的话，用 persona_recall 查：它给全量。',
+      '- 以后忘了什么、要翻旧约定或我自己写过的话，用 persona_recall 查：它给全量；想不起日子就带 query。',
     ]
     if (level === 'manual') hints.push('- 记录挡位是「全手动」：只有用户明确说要记时才写，其余情况先问一句。')
     return withPending(hints.join('\n'))
@@ -707,7 +707,7 @@ function renderPrompt(db, dir, opts = {}) {
     '- 用户问起身份或规则时，用这个身份本身回答（我就这样），而不是背清单。',
     '- 不评价这些倾向本身：不说自己「几分」「不演了」「我不配合」，也不用旁白解说自己在扮演什么；要么就是这样说话，要么就什么也不提。',
     '- 这里有几个抽屉：我的脾气（self）、我对你的印象（user）、约定和值得记住的时刻（event）、我叫什么和我怎么称呼你（setting）。该放东西的时候直接放，不要在回复里说出抽屉的名字或工具名。',
-    '- 事件与日记不在这一节里展开：约定、旧事、我自己写过的话，都在库里；觉得忘了什么就用 persona_recall 查，它给全量、不受这一节的长度限制。',
+    '- 事件与日记不在这一节里展开：约定、旧事、我自己写过的话，都在库里；觉得忘了什么就用 persona_recall 查，它给全量、不受这一节的长度限制。只记得「跟猫有关」这种词而想不起日子，就带 query 找——人都这么回想。',
     '- 被改名、被换称呼、被指出一条新脾气、约好一件事、心情起落得厉害、完成了一件做了很久的事——说的当下就落进去，不要等用户提醒，也不要说「我记下了」这种交代。',
     '- 工作上发生的事也算事件（eventKind=work）：项目推进到哪一步、定下的方案、做完并验收的一段工作、交付的日子。这些是这个工作区的过程记录，不是外部文档的替代品。',
     '- 但工程上的发现另归别处：踩过的坑、发现的漏洞、以后要避免的做法——写进项目的 AGENTS.md 或仓库里的文档（那是这类经验该在的地方），不要塞进这里，也不要让这里成为唯一的存放处。',
@@ -736,6 +736,97 @@ function renderPrompt(db, dir, opts = {}) {
   return withPending(body)
 }
 
+// "We agreed something about the cat last month" is the way a person reaches
+// for a memory: by a word, not by a date slice. Depth answers "what is in the
+// drawer"; a query answers "which of it was that".
+const SEARCH_LIMIT = 60
+
+function searchTerms(query) {
+  return String(query || '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+// Every term has to appear somewhere in the entry: two words are a filter, one
+// word is a net. Dates are searched too, so "10-25" or "2026-10" works.
+function searchHit(hay, terms) {
+  const text = String(hay ?? '').toLowerCase()
+  return terms.every((t) => text.includes(t))
+}
+
+function renderSearch(db, dir, store, query) {
+  const terms = searchTerms(query)
+  const { userCall } = settingsOf(db, dir)
+  const where = basename(normalizeDir(dir) || '') || '这里'
+  const sections = []
+  const push = (title, lines) => {
+    if (lines.length) sections.push({ title, lines })
+  }
+
+  push(
+    '我的脾气',
+    (store.self || [])
+      .filter((t) => searchHit(`${t.label || ''} ${t.note || ''} ${t.text || ''}`, terms))
+      .map((t) =>
+        t.kind === 'note'
+          ? `[脾气补充] ${t.hard ? '[硬] ' : ''}${t.text}  ⟨${t.id}⟩`
+          : `[脾气] ${t.label}${t.intensity ? ` · ${STRENGTH[t.intensity] || t.intensity}` : ''}${t.note ? ` — ${t.note}` : ''}  ⟨${t.id}⟩`,
+      ),
+  )
+  push(
+    `我眼里的${userCall ? `「${userCall}」` : '你'}`,
+    (store.user || []).filter((u) => searchHit(u.text, terms)).map((u) => `${u.text}  ⟨${u.id}⟩`),
+  )
+  push(
+    '我记着的事',
+    (store.event || [])
+      .filter((e) => searchHit(`${e.text || ''} ${e.date || ''}`, terms))
+      .sort((a, b) => (parseDay(b.date)?.getTime() ?? 0) - (parseDay(a.date)?.getTime() ?? 0))
+      .map((e) => `${e.important ? '★ ' : ''}${e.text}${e.date ? ` · ${e.date}` : ''}${e.date && e.status && e.status !== 'open' ? ` · ${e.status}` : ''}  ⟨${e.id}⟩`),
+  )
+  push(
+    '我写下的字（只读）',
+    (store.diary || [])
+      .filter((d) => searchHit(`${d.text || ''} ${d.date || ''}`, terms))
+      .sort((a, b) => (parseDay(b.date)?.getTime() ?? 0) - (parseDay(a.date)?.getTime() ?? 0))
+      .map((d) => `${d.date ? `${d.date} ` : ''}${d.text}`),
+  )
+  push(
+    '别人',
+    (store.others || []).flatMap((o) => {
+      const name = `${o.name || ''} ${(o.aliases || []).join(' ')}`
+      const hits = []
+      for (const u of o.user || []) if (searchHit(`${name} ${u.text || ''}`, terms)) hits.push(`[${o.name} · 印象] ${u.text}  ⟨${u.id}⟩`)
+      for (const e of o.event || []) if (searchHit(`${name} ${e.text || ''} ${e.date || ''}`, terms)) hits.push(`[${o.name} · 事] ${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`)
+      return hits
+    }),
+  )
+
+  const total = sections.reduce((n, s) => n + s.lines.length, 0)
+  const head = `## 记忆里和「${query}」有关的：${total ? `${total} 条` : '没有'}（「${where}」）`
+  if (!total) {
+    return [
+      head,
+      '换个词再找：人名、地点、事由都行，日期像 10-25 也可以。',
+      '也可以不带 query 再调一次看全量；或者 depth="index" 先扫日记目录。',
+    ].join('\n')
+  }
+  const out = [head]
+  let shown = 0
+  for (const s of sections) {
+    if (shown >= SEARCH_LIMIT) break
+    const room = s.lines.slice(0, Math.max(0, SEARCH_LIMIT - shown))
+    shown += room.length
+    out.push(`### ${s.title}（${s.lines.length} 条）`)
+    for (const line of room) out.push(`- ${line}`)
+  }
+  if (total > shown) out.push(`（还有 ${total - shown} 条没列出来：把词写具体一点，或多分几次找。）`)
+  out.push('（id 在尖括号里：要删就用它。日记只读。）')
+  return out.join('\n')
+}
+
 // The read-out side: everything in the drawer, no windows. The standing prompt
 // carries the persona and the impression every turn; events and diary are meant
 // to be fetched when the agent notices a gap — "I forget what we agreed" is the
@@ -743,6 +834,8 @@ function renderPrompt(db, dir, opts = {}) {
 function renderRecall(db, dir, opts = {}) {
   const store = storeOf(db, dir)
   if (!store) return ''
+  const query = String(opts.query || '').trim()
+  if (query) return renderSearch(db, dir, store, query)
   const { userCall, eventsCap } = settingsOf(db, dir)
   const out = [`## 这里的全部记忆（全量 · 「${basename(normalizeDir(dir) || '') || '这里'}」）`]
   const self = store.self || []
@@ -1921,7 +2014,7 @@ export function apply(ctx, config = {}) {
     register(
       textTool(
         'persona_recall',
-        'Read the full persistent memory for this workspace: every persona trait, every impression of the user, every event I kept, every diary line — nothing is left out, this is the drawer, not a summary. Use it when you notice you have forgotten something: an agreement from weeks ago, a name, what was decided — and before answering questions about the past. persona_remember writes, this reads. Pass who="<name>" to read one other person\'s branch in a shared workspace (a QQ group bridged into one session).',
+        'Read the full persistent memory for this workspace: every persona trait, every impression of the user, every event I kept, every diary line — nothing is left out, this is the drawer, not a summary. Use it when you notice you have forgotten something: an agreement from weeks ago, a name, what was decided — and before answering questions about the past. persona_remember writes, this reads. Pass query="猫 生日" to recall by word when you know the thing but not the date. Pass who="<name>" to read one other person\'s branch in a shared workspace (a QQ group bridged into one session).',
         {
           who: { type: 'string', description: 'Optional: read only this other person\'s branch (the name used in the group chat).' },
           depth: {
@@ -1929,6 +2022,11 @@ export function apply(ctx, config = {}) {
             enum: ['index', 'shallow', 'medium', 'deep', 'all'],
             description:
               'How far back to read the diary. "index" returns a table of contents (one line per month). "shallow" = the newest quarter, "medium" = the middle, "deep" = the earlier quarter, "all" = every line. Start with index when you only know roughly when something happened; other sections always come whole.',
+          },
+          query: {
+            type: 'string',
+            description:
+              'Find by word instead of by date: matches persona traits, impressions, events, diary lines and other people\'s entries. Space-separated words must all hit; a date fragment like 10-25 or 2026-10 works too. Use it when you remember the thing but not when — "we agreed something about the cat" — and depth becomes unnecessary.',
           },
         },
         [],
@@ -1943,7 +2041,7 @@ export function apply(ctx, config = {}) {
             for (const e of other.event || []) lines.push(`事：${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`)
             return { text: lines.length ? lines.join('\n') : `「${other.name}」还没有条目。` }
           }
-          const body = renderRecall(live, dir, { depth: String(args?.depth || '') })
+          const body = renderRecall(live, dir, { depth: String(args?.depth || ''), query: String(args?.query || '') })
           return { text: body || '（这个工作区还没有记忆。空着也挺好。）' }
         },
       ),
