@@ -109,6 +109,7 @@ window.__ModuleLoader__.load({
 .pp-btn:hover{background:var(--dsw-alias-bg-layer-2)}
 .pp-btn[data-primary="1"]{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);color:#fff}
 .pp-btn[data-danger="1"]{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}
+.pp-btn[data-armed="1"]{background:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary);color:#fff;font-weight:600}
 .pp-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pp-empty{color:var(--dsw-alias-label-secondary);font-size:12px;padding:10px 2px;line-height:1.6}
 .pp-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:auto;padding-top:8px;border-top:1px solid var(--dsw-alias-border-l1)}
@@ -248,16 +249,12 @@ window.__ModuleLoader__.load({
                           'div',
                           { key: u.id, className: 'pp-row', style: { marginTop: 2 } },
                           h('span', { className: 'pp-grow' }, u.text),
-                          h(
-                            'button',
-                            {
-                              className: 'pp-btn',
-                              'data-danger': '1',
-                              style: { padding: '1px 6px' },
-                              onClick: () => commit({ op: 'delOtherEntry', otherId: o.id, bucket: 'user', id: u.id }),
-                            },
-                            '删',
-                          ),
+                          h(Sure, {
+                            label: '删',
+                            confirm: '确认删除',
+                            style: { padding: '1px 6px' },
+                            onYes: () => commit({ op: 'delOtherEntry', otherId: o.id, bucket: 'user', id: u.id }),
+                          }),
                         ),
                       ),
                       (o.event || []).length
@@ -268,16 +265,12 @@ window.__ModuleLoader__.load({
                           'div',
                           { key: ev.id, className: 'pp-row', style: { marginTop: 2 } },
                           h('span', { className: 'pp-grow' }, `${ev.date ? `${ev.date} ` : ''}${ev.text}`),
-                          h(
-                            'button',
-                            {
-                              className: 'pp-btn',
-                              'data-danger': '1',
-                              style: { padding: '1px 6px' },
-                              onClick: () => commit({ op: 'delOtherEntry', otherId: o.id, bucket: 'event', id: ev.id }),
-                            },
-                            '删',
-                          ),
+                          h(Sure, {
+                            label: '删',
+                            confirm: '确认删除',
+                            style: { padding: '1px 6px' },
+                            onYes: () => commit({ op: 'delOtherEntry', otherId: o.id, bucket: 'event', id: ev.id }),
+                          }),
                         ),
                       ),
                       !n ? h('div', { className: 'pp-hint' }, '还没有记录。') : null,
@@ -573,22 +566,24 @@ window.__ModuleLoader__.load({
                       ),
                       cur === 'diary'
                         ? h('span', { className: 'pp-tag', title: '这是它自己写下的，只能往下添，改不了也删不了' }, '只读')
-                        : h(
-                        'button',
-                        {
-                          className: 'pp-btn',
-                          'data-danger': '1',
-                          style: { padding: '2px 7px' },
-                          onClick: (e) => {
-                            e.stopPropagation()
-                            // Traits never disappear in one click: the staged path
+                        : item.kind === 'trait'
+                          ? // Traits never disappear in one click: the staged path
                             // opens first, whichever surface asked.
-                            if (item.kind === 'trait') setModal({ kind: 'drop', item })
-                            else send({ op: 'delEntry', id: item.id }).then(() => setSel(''))
-                          },
-                        },
-                        '删',
-                      ),
+                            h(
+                              'button',
+                              {
+                                className: 'pp-btn',
+                                'data-danger': '1',
+                                style: { padding: '2px 7px' },
+                                onClick: (e) => { e.stopPropagation(); setModal({ kind: 'drop', item }) },
+                              },
+                              '删',
+                            )
+                          : h(Sure, {
+                              label: '删',
+                              confirm: '确认删除',
+                              onYes: () => send({ op: 'delEntry', id: item.id }).then(() => setSel('')),
+                            }),
                     ),
                   )
                 : h(
@@ -991,7 +986,11 @@ window.__ModuleLoader__.load({
                     { key: o.id, className: 'pp-row', style: { marginTop: 4 } },
                     h('span', { className: 'pp-grow' }, `${o.from} · ${o.type === 'archive' ? '归档' : '工作区'} · ${o.n} 条 · ${o.at}`),
                     h('button', { className: 'pp-btn', onClick: () => setRestoreId(o.id) }, '找回…'),
-                    h('button', { className: 'pp-btn', onClick: () => send({ op: 'purgeOrphan', id: o.id }) }, '永久删除'),
+                    h(Sure, {
+                      label: '永久删除',
+                      confirm: '真要永久删？',
+                      onYes: () => send({ op: 'purgeOrphan', id: o.id }),
+                    }),
                   ),
                 ),
                 restoreId
@@ -1422,6 +1421,34 @@ window.__ModuleLoader__.load({
             h('button', { className: 'pp-btn', 'data-danger': '1', onClick: onOk }, confirm),
           ),
         ),
+      )
+    }
+
+    // Two clicks, never one: the button that destroys something arms itself
+    // first, and disarms after four seconds so a stray click cannot linger as
+    // a live weapon.
+    function Sure({ label, confirm: confirmLabel, onYes, style, danger }) {
+      const [armed, setArmed] = useState(false)
+      useEffect(() => {
+        if (!armed) return undefined
+        const t = setTimeout(() => setArmed(false), 4000)
+        return () => clearTimeout(t)
+      }, [armed])
+      return h(
+        'button',
+        {
+          className: 'pp-btn',
+          'data-danger': danger === false ? undefined : '1',
+          'data-armed': armed ? '1' : undefined,
+          style: style || { padding: '2px 7px' },
+          onClick: (e) => {
+            e.stopPropagation()
+            if (!armed) { setArmed(true); return }
+            setArmed(false)
+            onYes()
+          },
+        },
+        armed ? confirmLabel || '再点一次确认' : label,
       )
     }
 

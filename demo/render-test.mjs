@@ -121,6 +121,37 @@ let plugin = null
 try { plugin = registration.factory((name) => modules[name] || React) } catch (e) { console.log('factory threw:', e.message); process.exit(1) }
 try { plugin.apply(ctx) } catch (e) { console.log('apply threw:', e.message) }
 
+// Expand a tree, invoking function components, so the test can click what a
+// person would click instead of only matching strings in the source.
+function expand(node) {
+  if (node === null || node === undefined || node === false || node === true) return []
+  if (Array.isArray(node)) return node.flatMap(expand)
+  if (typeof node === 'string' || typeof node === 'number') return [String(node)]
+  const { type, props, kids } = node
+  if (typeof type === 'function') {
+    const key = type.name || 'anon'
+    const bagRef = bags.get(key) || { vals: [] }
+    bags.set(key, bagRef)
+    const prev = current
+    current = { i: 0, bag: bagRef }
+    let out
+    try { out = type({ ...props, __bag: undefined }) } finally { current = prev }
+    return expand(out)
+  }
+  const children = (kids || []).flatMap(expand).concat(props && props.children ? expand(props.children) : [])
+  return [{ type, props, children }]
+}
+const textOf = (nodes) => nodes.map((n) => (typeof n === 'string' ? n : textOf(n.children || []))).join(' ')
+const findNode = (nodes, pred) => {
+  for (const n of nodes) {
+    if (typeof n === 'string') continue
+    if (pred(n)) return n
+    const hit = findNode(n.children || [], pred)
+    if (hit) return hit
+  }
+  return null
+}
+
 const results = []
 const ok = (name, cond, extra) => { results.push([name, !!cond, extra]); if (!cond) console.log('FAIL', name, extra ?? '') }
 
@@ -164,6 +195,33 @@ for (const [name, def] of renderTargets) {
   } catch (e) {
     ok(`render ${name} clean`, false, e.message)
   }
+}
+
+// ---- a destructive button must arm before it fires ------------------------
+{
+  const sureSrc = source.slice(source.indexOf('function Sure('), source.indexOf('// One glyph'))
+  ok('Sure guard exists', sureSrc.length > 0 && sureSrc.includes('4000'))
+  const SureComp = new Function('h', 'useState', 'useEffect', `${sureSrc}\nreturn Sure`)(createElement, useState, useEffect)
+  let fired = 0
+  const node = createElement(SureComp, { label: '永久删除', confirm: '真要永久删？', onYes: () => { fired += 1 } })
+  let nodes = expand(node)
+  ok('guard shows the plain label first', textOf(nodes) === '永久删除', textOf(nodes))
+  const btn = findNode(nodes, (n) => n.props && typeof n.props.onClick === 'function')
+  if (btn) {
+    btn.props.onClick({ stopPropagation() {} })
+    nodes = expand(node)
+    ok('first click only arms', textOf(nodes).includes('真要永久删'), textOf(nodes))
+    ok('first click does not fire', fired === 0)
+    const armedBtn = findNode(nodes, (n) => n.props && typeof n.props.onClick === 'function')
+    if (armedBtn) {
+      armedBtn.props.onClick({ stopPropagation() {} })
+      ok('second click fires exactly once', fired === 1, String(fired))
+    }
+  }
+  // Nothing irreversible may hang off a single click anywhere in the bundle.
+  ok('permanent delete goes through the guard', /label: '永久删除',[\s\S]{0,160}?op: 'purgeOrphan'/.test(source))
+  const oneClick = /onClick:\s*\([^)]*\)\s*=>\s*(?:send|commit)\(\{\s*op:\s*'(?:purgeOrphan|delEntry|delOtherEntry)'/
+  ok('no one-click irreversible delete', !oneClick.test(source))
 }
 
 const failed = results.filter((r) => !r[1])
