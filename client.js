@@ -1139,8 +1139,8 @@ window.__ModuleLoader__.load({
         setErr('')
         const r = await send({ op: 'importSessions' })
         const x = (r && r.extra) || {}
-        if (x.empty) {
-          setErr('这个工作区还没有能读的会话记录。')
+        if (!x.queued) {
+          setErr(`没能叫醒这个工作区的会话（${(x.kick && x.kick.why) || '未知原因'}）——先在这里开一个会话，再点一次。`)
           return
         }
         setSess(x)
@@ -1152,22 +1152,20 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'pp-modal' },
           h('h3', null, '导入人设'),
-          h('div', { className: 'pp-hint' }, '可以贴一整段、从文件里读，或者把这个工作区的会话记录读出来让我分析。'),
+          h('div', { className: 'pp-hint' }, '可以贴一整段、从文件里读，或者让它回忆我们之间的对话、自己写进去。'),
           h(
             'div',
             { className: 'pp-row' },
             h('button', { className: 'pp-btn', onClick: scan }, files ? '重新找文件' : '从文件导入…'),
-            h('button', { className: 'pp-btn', onClick: readSessions }, '读取会话记录…'),
+            h('button', { className: 'pp-btn', onClick: readSessions }, '回忆并写入…'),
             err ? h('span', { className: 'pp-mini', style: { color: 'var(--dsw-alias-state-error)' } }, err) : null,
           ),
           sess
             ? h(
                 'div',
                 { style: { border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8, padding: 8, marginTop: 6 } },
-                h('div', { className: 'pp-mini' }, `读了 ${sess.sessions}${sess.total && sess.total > sess.sessions ? ` / 共 ${sess.total}` : ''} 个会话、${sess.turns} 轮对话、${sess.chars} 字`),
-                h('div', { className: 'pp-mini', style: { wordBreak: 'break-all' } }, sess.path || '(没能落盘)'),
-                h('div', { className: 'pp-hint', style: { marginTop: 4 } }, sess.queued ? (sess.kick && sess.kick.ok ? '已经叫醒这个工作区的会话：它这一轮就会读这份转写，拆完写进来。' : `已排好，但没能当场叫醒会话（${(sess.kick && sess.kick.why) || '未知原因'}）——你下次说话时我会先读它。`) : '没找到可读的会话。'),
-                h('div', { style: { maxHeight: 120, overflow: 'auto', marginTop: 6, fontSize: 11, color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'pre-wrap' } }, (sess.preview || '').slice(0, 900)),
+                h('div', { className: 'pp-mini' }, '已经叫醒这个工作区的会话：它这一轮会先看一眼已经记下的，再把这段相处里该留的写进去。'),
+                h('div', { className: 'pp-hint', style: { marginTop: 4 } }, '它手上没有这段对话时不会编；那种情况它会直接说「我手上没有这段记忆」。'),
               )
             : null,
           files

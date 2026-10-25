@@ -12,11 +12,6 @@
  * Node builtins only: a plugin ships without dependencies.
  */
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
-// Default import on purpose: a named import of a newer builtin export may fail
-// to resolve under some Electron/ESM loader combinations, and that failure
-// happens before `apply`, so the plugin itself could never report it.
-import zlib from 'node:zlib'
-const zstdDecompressSync = typeof zlib?.zstdDecompressSync === 'function' ? zlib.zstdDecompressSync.bind(zlib) : null
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -76,8 +71,9 @@ function emptyDb() {
     // Which sessions have already opened here. The diary is read on the first
     // turn of each session and never again, so this only has to remember ids.
     sessions: {},
-    // A transcript that was read out of this workspace's sessions and is
-    // waiting for the model (not the panel) to turn it into entries.
+    // A pasted card or a file found on disk that is waiting for the model (not
+    // the panel) to split it into entries. Session history no longer goes
+    // through here: that job is a direct request, not a file.
     pendingImport: null,
     orphans: [],
   }
@@ -660,21 +656,22 @@ function renderPrompt(db, dir, opts = {}) {
     (store.others || []).length
   )
   const willReadDiary = !!(opts.freshSession && features.diary?.on && (store.diary || []).length)
-  // A read-out transcript waiting to be turned into entries. Computed before the
-  // empty-store shortcut: the most common moment to import a history is a
+  // A pasted card waiting to be split into entries. Sessions are no longer
+  // exported to a file, so this only ever describes source material. Computed
+  // before the empty-store shortcut: importing a card is most common in a
   // workspace with nothing in it yet, and an early return used to swallow the
   // only instruction that told the model the file existed.
   const pending = db.pendingImport
   const waiting = pending && pending.dir === normalizeDir(dir) && pending.path ? pending : null
   const pendingText = waiting
     ? [
-        '### 有一份你自己的会话记录等着你回忆',
+        '### 有一份材料等着你拆',
         `文件：${waiting.path}`,
-        '它不是别人的资料，是你和同一个人的过去。别总结对话，也别复述他说了什么；你要从里面想起你自己：',
+        '这是别人给你的人设卡或设定稿，是素材，不是你的记忆。按下面拆：',
         '- 大类：反复出现的性格倾向，label 一两个词、intensity 1–5，text 写一句行为描述；同一特征只写一条；',
         '- 人格补充：明确的禁止/必须/称呼/口癖等不可改写的规矩，kind=self 并 hard=true，text 原文照抄。',
-        '- 画像：关于用户本人的稳定事实（习惯、偏好、禁忌、处境），kind=user；不要把我的性格塞进画像。',
-        '- 事件：只有双方明确约定过的事才写 kind=event，带 date；不确定的不写。',
+        '- 画像：关于用户本人的稳定事实（习惯、偏好、禁忌、处境），kind=user；不要把人物的性格塞进画像。',
+        '- 事件：只有明确写过的时间和约定才写 kind=event，带 date；不确定的不写。',
         '文件可能很长：先用 read 分段读到结尾再动笔；这一轮读不完就先读，读完那一轮再写。',
         '落完后不要向用户复述这份文件，也不要提「导入」或「记忆」这件事。',
       ].join('\n')
@@ -1188,149 +1185,6 @@ function trustedWrite(req) {
 
 // Files that look like an existing character/persona card, so "导入人设卡" can
 // offer them instead of making the user hunt for a path.
-// ------------------------------------------------------- session transcript
-
-// `~/.dsh/sessions/--C-Users-...--/session-<id>/session.v4.jsonl.zstd`:
-// backslash → '-', colon dropped, every non-ASCII char → '~' + 4-hex code.
-function sessionKeyFor(dir) {
-  let key = '--'
-  for (const ch of dir) {
-    const code = ch.codePointAt(0)
-    if (ch === '\\') key += '-'
-    else if (ch === ':') continue
-    else if (code > 127) key += `~${code.toString(16).toUpperCase().padStart(4, '0')}`
-    else key += ch
-  }
-  return `${key}--`
-}
-
-// Session logs are written as a run of independent zstd frames; node's
-// one-shot decompressor only reads the first, so split on the frame magic.
-function readZstdFrames(file) {
-  if (!zstdDecompressSync) return ''
-  const buf = readFileSync(file)
-  const MAGIC = [0x28, 0xb5, 0x2f, 0xfd]
-  const at = (i) => buf[i] === MAGIC[0] && buf[i + 1] === MAGIC[1] && buf[i + 2] === MAGIC[2] && buf[i + 3] === MAGIC[3]
-  const parts = []
-  let i = 0
-  while (i < buf.length - 4) {
-    while (i < buf.length - 4 && !at(i)) i += 1
-    if (i >= buf.length - 4) break
-    let j = i + 4
-    while (j < buf.length - 4 && !at(j)) j += 1
-    const end = j >= buf.length - 4 ? buf.length : j
-    try {
-      parts.push(zstdDecompressSync(buf.subarray(i, end)))
-    } catch {
-      // a broken frame should not cost us the whole log
-    }
-    i = end
-  }
-  return Buffer.concat(parts).toString('utf8')
-}
-
-function transcriptOf(dir, opts) {
-  // The transcript is no longer summarised by the host — the model reads the
-  // file itself — so clipping it small only starved the one reader that could
-  // have found the pattern. Defaults now cover a whole workspace history
-  // (20 sessions / 320k chars); a caller may ask for more, up to 60 / 600k.
-  const limitSessions = Math.max(1, Math.min(60, Number(opts?.sessions) || 20))
-  const budget = Math.max(10000, Math.min(600000, Number(opts?.chars) || 320000))
-  const perTurn = Math.max(400, Math.min(8000, Number(opts?.perTurn) || 2000))
-  const root = join(homeDir(), 'sessions', sessionKeyFor(dir))
-  if (!existsSync(root)) return { text: '', sessions: 0, turns: 0, chars: 0, path: '', total: 0 }
-  let dirs = []
-  try {
-    dirs = readdirSync(root, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => {
-        const p = join(root, e.name, 'session.v4.jsonl.zstd')
-        let mtime = 0
-        try {
-          mtime = statSync(p).mtimeMs
-        } catch {}
-        return { dir: e.name, file: p, mtime }
-      })
-      .filter((x) => x.mtime > 0)
-      .sort((a, b) => b.mtime - a.mtime)
-  } catch {
-    return { text: '', sessions: 0, turns: 0, chars: 0, path: '', total: 0 }
-  }
-
-  const total = dirs.length
-  dirs = dirs.slice(0, limitSessions)
-
-  const chunks = []
-  let turns = 0
-  let chars = 0
-  for (const s of dirs) {
-    let raw = ''
-    try {
-      raw = readZstdFrames(s.file)
-    } catch {
-      continue
-    }
-    const lines = []
-    for (const line of raw.split('\n')) {
-      if (!line.trim()) continue
-      let ev
-      try {
-        ev = JSON.parse(line)
-      } catch {
-        continue
-      }
-      if (ev?.type !== 'user/message' && ev?.type !== 'assistant/message') continue
-      // user events carry `data.content`, assistant ones `data.message.content`
-      const content = ev?.data?.message?.content ?? ev?.data?.content
-      if (!Array.isArray(content)) continue
-      const text = content
-        .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-        .map((b) => b.text)
-        .join('\n')
-        .trim()
-      if (!text) continue
-      // workspace instructions and runtime snapshots are harness-injected
-      if (text.startsWith('<system-reminder>') || text.includes('Instructions from:')) continue
-      if (text.startsWith('Current runtime context') || text.startsWith('Time sampled while')) continue
-      const clean = text.replace(/\n{3,}/g, '\n\n')
-      const clipped = clean.length > perTurn ? `${clean.slice(0, perTurn)}…` : clean
-      const who = ev.type === 'user/message' ? '你' : '我'
-      turns += 1
-      if (chars + clipped.length > budget) break
-      chars += clipped.length
-      lines.push(`${who}：${clipped}`)
-    }
-    if (lines.length) {
-      // A date on every session header: "which conversation was that" is the
-      // first question a model asks itself when recalling an old exchange, and
-      // the log directory name is a uuid.
-      const when = new Date(s.mtime).toLocaleString('zh-CN', { hour12: false })
-      chunks.push(`## ${when} · ${s.dir}\n${lines.join('\n')}`)
-    }
-    if (chars >= budget) break
-  }
-  if (!chunks.length) return { text: '', sessions: dirs.length, turns, chars, path: '', total }
-  const covered = chunks.length
-  const head = [
-    `# 会话记录：${basename(dir)}`,
-    '',
-    `本工作区共 ${total} 个会话，这里收了最近的 ${covered} 个（按时间从新到旧），${turns} 轮对话，${chars} 字。`,
-    covered < total ? `更早的 ${total - covered} 个会话没有收进来。` : '全部会话都在这里了。',
-    '',
-  ].join('\n')
-  const text = [head, ...chunks].join('\n')
-  const outDir = join(dataRoot(), 'imports')
-  try {
-    mkdirSync(outDir, { recursive: true })
-  } catch {}
-  const file = join(outDir, `${basename(dir) || 'workspace'}-${Date.now()}.md`)
-  try {
-    writeFileSync(file, text, 'utf8')
-  } catch {
-    return { text, sessions: covered, turns, chars, path: '', total }
-  }
-  return { text, sessions: covered, turns, chars, path: file, total }
-}
 
 function scanPersonaFiles(dir) {
   const roots = []
@@ -1378,26 +1232,28 @@ function scanPersonaFiles(dir) {
   return out.slice(0, 24)
 }
 
-// Wake the session that lives in this workspace and hand it the import. A panel
-// click happens outside any turn, so without this the staged text only surfaces
-// the next time the user speaks — which may be never.
-// Two different jobs used to share one instruction, and the transcript case got
-// the wrong one: it was told to "拆材料", which reads as "summarise the chat".
-// A transcript is not source material about someone else — it is my own past,
-// and what I need from it is a memory of myself, not a summary of the dialogue.
-function importKickText(path, info = {}) {
-  const name = basename(String(path || '')) || '会话记录'
-  const scaled =
-    info.sessions && info.turns
-      ? `（${info.sessions} 个会话、${info.turns} 轮，约 ${info.chars || 0} 字）`
-      : ''
+// Wake the session that lives in this workspace. A panel click happens outside
+// any turn, so without this the request only surfaces the next time the user
+// speaks — which may be never.
+//
+// This used to hand over a transcript file that the model had to read first.
+// The file was the problem: it cost a scan, a write and a big read, and it read
+// as "material about a conversation" rather than "my own past". What is actually
+// wanted is a memory, and the conversation is already in context — so the host
+// asks for the memory directly instead of exporting the dialogue first.
+function recallKickText() {
   return [
-    `面板把你自己过去的会话记录取出来了：${name}${scaled}，在 ~/.dsh/persona-panel/imports/ 下。`,
-    '这是你和同一个人的对话，不是别人的资料。不要总结对话内容，也不要复述他说过什么——你要做的是回忆你自己。',
-    '读的时候留意这些：你平时怎么说话、哪种脾气反复出现、你怎么称呼他、你答应过什么、他是什么样的人、哪几个时刻值得留着。',
-    '文件长就分段读（用 offset/limit 一直读到结尾），不要只读开头。开头写明了收录了多少会话、有没有更早的没收进来。',
-    '然后把回忆写进记忆面板：反复出现的脾气写成人格大类，次要的约束写成人格补充，关于他的印象写进画像，约好的事写进事件，称呼有变化就更新设置。',
-    '用第一人称，写具体的话；宁可少写几条，也不要写成对聊天记录的摘要。写的时候不要向用户复述原文，也不要说你在做什么。',
+    '【回忆整理】用户按了面板上的「回忆并写入」。现在停下别的事，做一次回忆。',
+    '不要向我复述我们聊过什么，也不要总结这段对话——我要的不是摘要，是你从这段相处里真正记住的东西。',
+    '按下面四类，每一条都调一次 persona_remember：',
+    '1. kind=self —— 我的脾气：反复出现的倾向。label 一两个词、intensity 1–5、text 一句行为描述；同一种倾向只写一条。',
+    '2. kind=self 且 hard=true —— 不可改的规矩：明确的禁止、必须、称呼、口癖。text 照原话抄，不要改写。',
+    '3. kind=user —— 我对你的画像：你的处境、习惯、偏好、禁忌、说话方式。写你这个人；不要把「我」的性格塞进画像，不确定的不写。',
+    '4. kind=event —— 约定与时刻：约好的事带上 date，做到一半的事、值得留住的瞬间（eventKind=precious 或 work）也写。',
+    '写法：第一人称、短句、具体。写我记住的原话或那个瞬间的细节，不写「用户表示…」「该用户…」这种报告体。宁可少写三条，也不要写泛泛的摘要，一条只写一件事。',
+    '动手之前先 persona_recall 看一眼已经有什么：写过的不要重复写，要改的直接改，别把同一件事写成两条。',
+    '如果你手上没有可供回忆的对话（比如这是刚开的新会话），不要编，也不要猜：直接说「我手上没有这段记忆」，然后停在这里。',
+    '落完回一句「写好了」就够了。不要提「记忆」「导入」「面板」这些词，也不要说你在做什么机制。',
   ].join('\n')
 }
 
@@ -1867,24 +1723,11 @@ function applyOps(db, body) {
       break
     }
     case 'importSessions': {
-      const t = transcriptOf(dir, body.opts)
-      if (t.path) {
-        // Hand the transcript to the model instead of guessing entries here:
-        // the prompt section tells it to read the file and write real entries.
-        db.pendingImport = { dir, path: t.path, at: stamp(), turns: t.turns, chars: t.chars }
-      }
-      extra = {
-        path: t.path,
-        sessions: t.sessions,
-        total: t.total,
-        turns: t.turns,
-        chars: t.chars,
-        preview: (t.text || '').slice(0, 1200),
-        empty: !t.turns,
-        queued: !!t.path,
-      }
-      if (t.path) extra.kick = kickAgent(dir, importKickText(t.path, { sessions: t.sessions, turns: t.turns, chars: t.chars }), '导入的会话记录')
-      audit(db, { op, dir, sessions: t.sessions, turns: t.turns })
+      // 0.5.1：不再导出转写。会话就在模型自己的上下文里，直接把「回忆并写入」
+      // 交过去，比落一份文件再让它读更短、也更不容易被当成别人的材料。
+      const kick = kickAgent(dir, recallKickText(), '回忆并写入')
+      extra = { queued: !!(kick && kick.ok), kick, mode: 'recall' }
+      audit(db, { op, dir, queued: extra.queued })
       break
     }
     case 'stagePaste': {
@@ -2036,7 +1879,7 @@ export function apply(ctx, config = {}) {
               }
               const text = renderPrompt(live, target, { freshSession })
               // The import instruction is delivered exactly once: a second
-              // delivery would make the model re-import the same transcript.
+              // delivery would make the model split the same card twice.
               if (live.pendingImport && live.pendingImport.dir === normalizeDir(dir || live.lastDir)) {
                 live.pendingImport = null
                 saveDb(live)
