@@ -1,0 +1,53 @@
+{
+  "name": "dsh-persona-panel",
+  "version": "0.4.1",
+  "description": "Per-workspace persona, user profile and event memory for DeepSeek Harness, with a panel to review and retract every entry. 按工作区分开的人设卡、用户画像与事件记忆，每条都能看来历、能撤回。",
+  "type": "module",
+  "main": "index.js",
+  "license": "MIT",
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "persona",
+    "memory",
+    "profile"
+  ],
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "screenshot.png"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": false
+    }
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mihomooo/dsh-persona-panel.git"
+  },
+  "homepage": "https://github.com/mihomooo/dsh-persona-panel#readme",
+  "bugs": {
+    "url": "https://github.com/mihomooo/dsh-persona-panel/issues"
+  },
+  "author": "mihomooo"
+}

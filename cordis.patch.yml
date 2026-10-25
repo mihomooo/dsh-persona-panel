@@ -1,0 +1,4 @@
+# dsh bundle patch: inserts the persona panel host plugin into a profile.
+- insert:
+    - id: persona-panel
+      name: 'dsh-persona-panel'

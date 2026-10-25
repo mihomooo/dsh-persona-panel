@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>记忆插件 · 第二阶段线框</title>
+<style>
+  :root{
+    --ink:#1f2933; --sub:#52606d; --line:#9fb3c8; --fill:#f5f8fa;
+    --accent:#2b6cb0; --accent-soft:#e3f0fb; --warn:#b7791f; --ok:#2f855a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:40px 28px 96px;
+    font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+    color:var(--ink); background:#fff; line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:.5px}
+  .lede{color:var(--sub);font-size:14px;margin:0 0 8px}
+  .terms{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 40px}
+  .term{background:var(--fill);border:1px solid #d9e2ec;border-radius:999px;
+        padding:4px 12px;font-size:13px;color:var(--sub)}
+  .term b{color:var(--ink)}
+  section{margin:0 0 56px}
+  h2{font-size:19px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .num{display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:50%;background:var(--accent);
+    color:#fff;font-size:14px;font-weight:400;flex:none}
+  .cap{color:var(--sub);font-size:13.5px;margin:0 0 16px}
+  figure{margin:0;background:#fff;border:1px solid #e4ebf2;border-radius:14px;
+    padding:18px 18px 10px;box-shadow:0 1px 3px rgba(16,42,67,.05)}
+  svg{display:block;width:100%;height:auto}
+  figcaption{color:var(--sub);font-size:12.5px;padding:10px 4px 6px}
+  ol.legend{margin:6px 0 0;padding-left:22px;font-size:13.5px;color:var(--sub)}
+  ol.legend li{margin:3px 0}
+  ol.legend b{color:var(--ink);font-weight:600}
+  /* svg typography */
+  text{font-family:"Microsoft YaHei","Segoe UI",sans-serif;fill:var(--ink)}
+  .h{font-size:15px;font-weight:600}
+  .b{font-size:12.5px;fill:var(--sub)}
+  .m{font-size:11.5px;fill:#3e4c59;font-family:Consolas,"Cascadia Mono",monospace}
+  .tag{font-size:11px;fill:#fff}
+  .note{font-size:11.5px;fill:var(--accent)}
+  rect.box{fill:var(--fill);stroke:var(--line);stroke-width:1.4}
+  rect.panel{fill:#fff;stroke:#7b8794;stroke-width:1.6}
+  rect.hi{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+  rect.ghost{fill:#fff;stroke:#bcccdc;stroke-width:1.2;stroke-dasharray:4 3}
+  rect.pill{fill:#fff;stroke:var(--line);stroke-width:1.2;rx:6}
+  path.ar{fill:none;stroke:var(--accent);stroke-width:1.6}
+  path.dash{fill:none;stroke:var(--line);stroke-width:1.2;stroke-dasharray:5 4}
+  line.div{stroke:#d9e2ec;stroke-width:1.2}
+  .circle{fill:var(--accent)}
+  .circtxt{font-size:11px;fill:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>记忆插件 · 第二阶段线框</h1>
+<p class="lede">这是形状，不是成品。先看它长什么样、点起来是什么感觉，改到顺眼再写代码。</p>
+
+<div class="terms">
+  <span class="term"><b>人设卡</b> 我是谁（大类 + 强度 + 补充）</span>
+  <span class="term"><b>画像</b> 我对你的印象（只能删，不能改）</span>
+  <span class="term"><b>事件</b> 承诺 / 约定 / 强烈情绪</span>
+  <span class="term"><b>挡位</b> 记得多细：全手动 / 半自动 / 主动 / 全自动</span>
+  <span class="term"><b>共生</b> 两个工作区共用同一份数据</span>
+</div>
+
+<!-- ============ 1 ============ -->
+<section>
+  <h2><span class="num">1</span>一个回合里，记忆是怎么转的</h2>
+  <p class="cap">我判断这件事关于谁、值不值得记、要不要问你，然后写进账本；下个回合开头再读出来。</p>
+  <figure>
+    <svg viewBox="0 0 1200 800" role="img" aria-label="记忆数据流">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5"
+          markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b6cb0"/>
+        </marker>
+      </defs>
+
+      <!-- 对话 -->
+      <rect class="box" x="420" y="20" width="360" height="80" rx="12"/>
+      <text class="h" x="600" y="52" text-anchor="middle">一个回合</text>
+      <text class="b" x="600" y="76" text-anchor="middle">你说一句 · 我回答一句</text>
+
+      <path class="ar" d="M600,100 V144" marker-end="url(#ar)"/>
+
+      <!-- 判断 -->
+      <rect class="hi" x="330" y="150" width="540" height="142" rx="12"/>
+      <text class="h" x="600" y="178" text-anchor="middle">我的判断</text>
+      <text class="b" x="600" y="202" text-anchor="middle">· 这句是关于谁的？我 / 你</text>
+      <text class="b" x="600" y="224" text-anchor="middle">· 值得记吗？性格 · 承诺 · 强烈情绪</text>
+      <text class="b" x="600" y="246" text-anchor="middle">· 要不要先问你一句？</text>
+      <text x="600" y="274" text-anchor="middle" font-size="12.5" fill="#2f855a">× 不要向你要人设 —— 人设从相处里长出来</text>
+
+      <!-- fork -->
+      <path class="ar" d="M600,292 V316 H245 V334" marker-end="url(#ar)"/>
+      <path class="ar" d="M600,292 V334" marker-end="url(#ar)"/>
+      <path class="ar" d="M600,316 H955 V334" marker-end="url(#ar)"/>
+
+      <!-- 人设卡 -->
+      <rect class="box" x="90" y="340" width="310" height="122" rx="12"/>
+      <text class="h" x="110" y="368">人设卡（我）</text>
+      <text class="b" x="110" y="394">大类：耐心 · 温柔 · 傲娇</text>
+      <text class="b" x="110" y="416">来源：日常相处里长出来</text>
+      <text class="b" x="110" y="438">× 不问「你想我怎样」</text>
+
+      <!-- 画像 -->
+      <rect class="box" x="445" y="340" width="310" height="122" rx="12"/>
+      <text class="h" x="465" y="368">画像（你）</text>
+      <text class="b" x="465" y="394">我对你的印象：习惯 · 脾气 · 喜恶</text>
+      <text class="b" x="465" y="416">只删，不改</text>
+      <text class="b" x="465" y="438">多聊几次才总结一次</text>
+
+      <!-- 事件 -->
+      <rect class="box" x="800" y="340" width="310" height="122" rx="12"/>
+      <text class="h" x="820" y="368">事件</text>
+      <text class="b" x="820" y="394">承诺 · 约定 · 强烈情绪</text>
+      <text class="b" x="820" y="416">承诺 → 弹窗问你</text>
+      <text class="b" x="820" y="438">情绪 → 静默记一句</text>
+
+      <!-- to storage -->
+      <path class="ar" d="M245,462 V494" marker-end="url(#ar)"/>
+      <path class="ar" d="M600,462 V494" marker-end="url(#ar)"/>
+      <path class="ar" d="M955,462 V494" marker-end="url(#ar)"/>
+
+      <!-- 存储 -->
+      <rect class="box" x="180" y="500" width="840" height="100" rx="12"/>
+      <text class="m" x="204" y="528">~/persona/stores/&lt;storeId&gt;/</text>
+      <text class="m" x="204" y="552">self.jsonl　　　user.jsonl　　　events.jsonl</text>
+      <text class="m" x="204" y="576">audit.jsonl　　 archive/&lt;时间戳&gt;/</text>
+
+      <path class="ar" d="M600,600 V652" marker-end="url(#ar)"/>
+
+      <!-- 提示段 -->
+      <rect class="ghost" x="380" y="658" width="440" height="92" rx="12"/>
+      <text class="h" x="400" y="686">下一回合开头的提示段</text>
+      <text class="b" x="400" y="710">我是谁（人设） · 我对你的印象（画像）</text>
+      <text class="b" x="400" y="732">还没兑现的事（事件）</text>
+
+      <!-- feedback loop -->
+      <path class="ar" d="M380,704 H60 V60 H414" marker-end="url(#ar)"/>
+      <text class="note" x="76" y="46">每回合开头自动注入（只给摘要，证据留在详情里）</text>
+    </svg>
+    <figcaption>中间那层「我的判断」不是黑箱——三类各有判据，判不出来就不记；人设不向你要，只在相处里长。</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 2 ============ -->
+<section>
+  <h2><span class="num">2</span>主面板：三栏</h2>
+  <p class="cap">左选工作区，中看内容，右看「这条是怎么来的」。</p>
+  <figure>
+    <svg viewBox="0 0 1200 800" role="img" aria-label="主面板三栏">
+      <!-- panel -->
+      <rect class="panel" x="40" y="40" width="900" height="640" rx="12"/>
+      <!-- header -->
+      <text class="h" x="68" y="78" font-size="16">记忆</text>
+      <text class="b" x="886" y="78" font-size="15">×</text>
+      <line class="div" x1="40" y1="96" x2="940" y2="96"/>
+
+      <!-- left -->
+      <text class="b" x="64" y="124">工作区</text>
+      <rect x="52" y="140" width="196" height="38" rx="8" fill="#e3f0fb" stroke="#2b6cb0" stroke-width="1.2"/>
+      <text class="b" x="66" y="165">▸ ds　　　　　　↔ 2</text>
+      <text class="b" x="66" y="206">▸ dsh_system</text>
+      <text class="b" x="66" y="242">▸ 生活</text>
+      <line class="div" x1="250" y1="96" x2="250" y2="600"/>
+
+      <!-- tabs -->
+      <rect x="272" y="110" width="92" height="34" rx="8" fill="#2b6cb0"/>
+      <text x="318" y="132" text-anchor="middle" font-size="13" fill="#fff">人设卡</text>
+      <text class="b" x="398" y="132">画像</text>
+      <text class="b" x="462" y="132">事件 (3)</text>
+      <line class="div" x1="250" y1="160" x2="700" y2="160"/>
+
+      <!-- 大类 -->
+      <text class="b" x="272" y="190">大类（点住可拖动排序）</text>
+      <rect class="pill" x="272" y="202" width="132" height="40" rx="8"/>
+      <text class="b" x="286" y="228">耐心　■■■■□</text>
+      <rect class="pill" x="416" y="202" width="132" height="40" rx="8"/>
+      <text class="b" x="430" y="228">温柔　■■■□□</text>
+      <rect class="pill" x="560" y="202" width="120" height="40" rx="8"/>
+      <text class="b" x="574" y="228">傲娇　■■□□□</text>
+      <text class="b" x="690" y="228">＋</text>
+
+      <!-- 补充 -->
+      <text class="b" x="272" y="286">人格补充</text>
+      <text class="b" x="272" y="316">· 先给结论，再给证据</text>
+      <text class="b" x="272" y="344">· 不确定就说不确定</text>
+      <text class="b" x="272" y="372">· 不用 SendKeys 打中文</text>
+      <rect class="ghost" x="490" y="296" width="206" height="76" rx="8"/>
+      <text class="b" x="508" y="326">编辑 · 删 · 悔一步</text>
+      <text class="b" x="508" y="350" font-size="11">只在你手动改过后出现</text>
+      <text class="b" x="272" y="418">＋ 加大类　　＋ 加补充</text>
+
+      <!-- drawer -->
+      <rect x="700" y="96" width="240" height="504" fill="#fafcfd"/>
+      <line class="div" x1="700" y1="96" x2="700" y2="600"/>
+      <text class="h" x="724" y="130" font-size="13">详情</text>
+      <text class="b" x="724" y="164">来自 10-24 会话</text>
+      <text class="b" x="724" y="186">「你连问了四遍</text>
+      <text class="b" x="724" y="206">　同一件事」</text>
+      <line class="div" x1="724" y1="232" x2="916" y2="232"/>
+      <text class="b" x="724" y="260">挡位　半自动</text>
+      <text class="b" x="724" y="288">写入　10-24 23:41</text>
+      <text class="b" x="724" y="316">强度　4 → 3</text>
+      <text class="b" x="724" y="344">原因　疑似不满，</text>
+      <text class="b" x="724" y="364">　　　软收敛后确认</text>
+      <line class="div" x1="724" y1="392" x2="916" y2="392"/>
+      <text class="b" x="724" y="420">改过 1 次</text>
+      <text class="b" x="724" y="448">[悔一步]</text>
+
+      <!-- footer -->
+      <line class="div" x1="40" y1="600" x2="940" y2="600"/>
+      <text class="b" x="700" y="646">［ 复制… ］　［ 清空… ］</text>
+
+      <!-- callout dots -->
+      <circle class="circle" cx="240" cy="120" r="11"/><text class="circtxt" x="240" y="124" text-anchor="middle">1</text>
+      <circle class="circle" cx="486" cy="100" r="11"/><text class="circtxt" x="486" y="104" text-anchor="middle">2</text>
+      <circle class="circle" cx="466" cy="186" r="11"/><text class="circtxt" x="466" y="190" text-anchor="middle">3</text>
+      <circle class="circle" cx="500" cy="286" r="11"/><text class="circtxt" x="500" y="290" text-anchor="middle">4</text>
+      <circle class="circle" cx="880" cy="120" r="11"/><text class="circtxt" x="880" y="124" text-anchor="middle">5</text>
+      <circle class="circle" cx="880" cy="616" r="11"/><text class="circtxt" x="880" y="620" text-anchor="middle">6</text>
+    </svg>
+    <ol class="legend">
+      <li><b>工作区列表</b>：<code>↔ 2</code> 表示这份数据正被两个工作区共用。点它展开共用者，里面有「切断共生」。</li>
+      <li><b>三个页签</b>：可以分别关掉；关掉的页签在这里根本不存在，不留灰位。</li>
+      <li><b>强度五格</b>：大类是「标签 + 强度」，适配你时只动强度，不动标签。</li>
+      <li><b>悬停</b>：出现「编辑 · 删 · 悔一步」。悔一步只在你手动改过之后出现，改第二次就消失。</li>
+      <li><b>详情抽屉</b>：一句话摘要 + 你的原话证据 + 挡位 + 改动史。没有这栏，半年后看到一条莫名画像只能全删。</li>
+      <li><b>复制 / 清空</b>：清空 = 归档，连点两次（第二次按钮换位置），归档在设置里可恢复、可永久删。</li>
+    </ol>
+  </figure>
+</section>
+
+<!-- ============ 3 ============ -->
+<section>
+  <h2><span class="num">3</span>两个弹窗</h2>
+  <p class="cap">左边只出现一次（初次唤醒）；右边在我的判断认为值得留时出现，文案我自己组织，不套模板。</p>
+  <figure>
+    <svg viewBox="0 0 1200 800" role="img" aria-label="两个弹窗">
+      <!-- modal A -->
+      <rect class="panel" x="40" y="40" width="530" height="500" rx="14"/>
+      <rect x="40" y="40" width="530" height="52" rx="14" fill="#f0f4f8"/>
+      <line class="div" x1="40" y1="92" x2="570" y2="92"/>
+      <text class="h" x="68" y="74">我叫什么</text>
+      <text class="b" x="540" y="74" font-size="15">×</text>
+
+      <text class="b" x="68" y="126">我该怎么称呼你</text>
+      <rect class="pill" x="68" y="138" width="300" height="34" rx="6"/>
+      <text class="b" x="80" y="160">小笨鱼</text>
+
+      <text class="b" x="68" y="204">我给自己起的名字</text>
+      <rect class="pill" x="68" y="216" width="300" height="34" rx="6"/>
+      <text class="b" x="80" y="238">DeepSeek Harness</text>
+
+      <text x="68" y="272" font-size="11.5" fill="#2f855a">不问你要人设，也不填性格问卷 —— 我自己长。</text>
+
+      <line class="div" x1="68" y1="292" x2="540" y2="292"/>
+      <text class="b" x="68" y="318">记忆做到多细（之后设置里可改）</text>
+
+      <text class="b" x="80" y="346">○　全手动　　只有我说「记」才写</text>
+      <text x="80" y="370" font-size="12.5" fill="#2b6cb0">●　半自动　　画像自动 · 承诺问我 · 情绪静默记</text>
+      <text class="b" x="80" y="394">○　主动　　　情绪也问我</text>
+      <text class="b" x="80" y="418">○　全自动　　连承诺也直接记，事后可撤</text>
+
+      <line class="div" x1="68" y1="440" x2="540" y2="440"/>
+      <text class="b" x="68" y="466">☑ 人设卡　　☑ 画像　　☑ 事件记忆</text>
+      <rect x="430" y="482" width="110" height="36" rx="8" fill="#2b6cb0"/>
+      <text x="485" y="505" text-anchor="middle" font-size="13" fill="#fff">开始</text>
+
+      <!-- modal B -->
+      <rect class="panel" x="630" y="110" width="530" height="330" rx="14"/>
+      <rect x="630" y="110" width="530" height="52" rx="14" fill="#f0f4f8"/>
+      <line class="div" x1="630" y1="162" x2="1160" y2="162"/>
+      <text class="h" x="658" y="144">这个我想留着</text>
+      <text class="b" x="1130" y="144" font-size="15">×</text>
+
+      <text class="b" x="658" y="202">你答应下周三前，把 bsk 那个 bug 给我一个结论。</text>
+      <text class="b" x="658" y="230">这话我收着？</text>
+
+      <rect class="pill" x="658" y="272" width="150" height="42" rx="8"/>
+      <text class="b" x="733" y="299" text-anchor="middle">留着</text>
+      <rect class="pill" x="826" y="272" width="150" height="42" rx="8"/>
+      <text class="b" x="901" y="299" text-anchor="middle">先不用</text>
+      <text class="b" x="658" y="352" font-size="11.5">按钮也跟着内容变：留着 / 收下 / 记着 / 先不用</text>
+      <text class="b" x="658" y="378" font-size="11.5">不问「以后别再问」——那是挡位，不在这一个按钮上。</text>
+
+      <!-- 标题怎么起 -->
+      <line class="div" x1="40" y1="588" x2="1160" y2="588"/>
+      <text class="b" x="40" y="614">标题怎么起：不套模板，从当时的对话里取一个意象，≤ 14 字，同一次会话不重复同一个开头。</text>
+
+      <rect class="box" x="40" y="634" width="352" height="140" rx="12"/>
+      <text class="m" x="64" y="664">承诺类</text>
+      <text x="64" y="698" font-size="15">「你答应过的，我记着」</text>
+      <text class="b" x="64" y="728">按钮：留着 · 先不用</text>
+      <text class="b" x="64" y="752">到期我会自己提一句</text>
+
+      <rect class="box" x="424" y="634" width="352" height="140" rx="12"/>
+      <text class="m" x="448" y="664">情绪类</text>
+      <text x="448" y="698" font-size="15">「那天不太好，我在」</text>
+      <text class="b" x="448" y="728">这条不问，直接记</text>
+      <text class="b" x="448" y="752">只记日子和我的感受</text>
+
+      <rect class="box" x="808" y="634" width="352" height="140" rx="12"/>
+      <text class="m" x="832" y="664">珍贵类</text>
+      <text x="832" y="698" font-size="15">「这个我想留着」</text>
+      <text class="b" x="832" y="728">你讲了一段很投入的事</text>
+      <text class="b" x="832" y="752">或者你第一次说出某句话</text>
+    </svg>
+    <figcaption>两边都不走会话里的提问卡片；标题和按钮都随内容变，不共用同一句模板。</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 4 ============ -->
+<section>
+  <h2><span class="num">4</span>副本复制 与 共生转移</h2>
+  <p class="cap">差别只有一句话：复制是两份，共生是一份。</p>
+  <figure>
+    <svg viewBox="0 0 1200 660" role="img" aria-label="复制与共生">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5"
+          markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2b6cb0"/>
+        </marker>
+      </defs>
+
+      <!-- left: copy -->
+      <text class="h" x="60" y="40">副本复制</text>
+      <text class="b" x="60" y="64">各走各的，互不影响</text>
+
+      <rect class="box" x="60" y="96" width="180" height="60" rx="10"/>
+      <text class="b" x="150" y="132" text-anchor="middle">工作区 ds</text>
+      <rect class="box" x="60" y="216" width="180" height="60" rx="10"/>
+      <text class="b" x="150" y="252" text-anchor="middle">工作区 生活</text>
+
+      <rect class="box" x="330" y="96" width="150" height="60" rx="10"/>
+      <text class="m" x="405" y="132" text-anchor="middle">store A</text>
+      <rect class="box" x="330" y="216" width="150" height="60" rx="10"/>
+      <text class="m" x="405" y="252" text-anchor="middle">store B</text>
+
+      <path class="ar" d="M240,126 H322" marker-end="url(#ar2)"/>
+      <path class="ar" d="M240,246 H322" marker-end="url(#ar2)"/>
+      <text class="note" x="252" y="110" font-size="11">深拷贝</text>
+      <text class="note" x="252" y="288" font-size="11">此后各自演化</text>
+
+      <!-- right: sym -->
+      <text class="h" x="660" y="40">共生转移</text>
+      <text class="b" x="660" y="64">同一份数据，改一处两处都变</text>
+
+      <rect class="box" x="660" y="96" width="180" height="60" rx="10"/>
+      <text class="b" x="750" y="132" text-anchor="middle">工作区 ds</text>
+      <rect class="box" x="660" y="216" width="180" height="60" rx="10"/>
+      <text class="b" x="750" y="252" text-anchor="middle">工作区 生活</text>
+
+      <rect class="hi" x="930" y="140" width="150" height="92" rx="10"/>
+      <text class="m" x="1005" y="172" text-anchor="middle">store S</text>
+      <text class="b" x="1005" y="196" text-anchor="middle">唯一一份</text>
+
+      <path class="ar" d="M840,126 H922" marker-end="url(#ar2)"/>
+      <path class="ar" d="M840,246 H922" marker-end="url(#ar2)"/>
+      <path class="dash" d="M922,160 H840"/>
+      <text class="note" x="852" y="110" font-size="11">母体</text>
+      <text class="note" x="852" y="288" font-size="11">子体</text>
+
+      <!-- cut -->
+      <line class="div" x1="60" y1="380" x2="1140" y2="380"/>
+      <text class="h" x="60" y="418">切断共生</text>
+      <text class="b" x="60" y="442">随时能分开：把 S 复制成 S′，箭头断开，之后各自演化</text>
+
+      <rect class="box" x="60" y="470" width="180" height="56" rx="10"/>
+      <text class="b" x="150" y="504" text-anchor="middle">工作区 生活</text>
+      <rect class="box" x="330" y="470" width="130" height="56" rx="10"/>
+      <text class="m" x="395" y="504" text-anchor="middle">S′</text>
+      <path class="ar" d="M240,498 H322" marker-end="url(#ar2)"/>
+      <text class="note" x="252" y="540" font-size="11">分出来的是独立一份</text>
+
+      <rect class="box" x="700" y="470" width="180" height="56" rx="10"/>
+      <text class="b" x="790" y="504" text-anchor="middle">工作区 ds</text>
+      <rect class="hi" x="960" y="470" width="130" height="56" rx="10"/>
+      <text class="m" x="1025" y="504" text-anchor="middle">S</text>
+      <path class="ar" d="M880,498 H952" marker-end="url(#ar2)"/>
+      <text class="note" x="892" y="540" font-size="11">仍指向原来那份</text>
+    </svg>
+    <figcaption>新工作区默认是空的，不弹窗、不问来源；只有你主动点「复制…」，才会复制或共用。共生的唯一出口是「切断」，所以它必须是按钮，不是设置里一行小字。</figcaption>
+  </figure>
+</section>
+
+<p class="cap" style="margin-top:8px">四张图对应四件事：数据怎么流、面板长什么样、什么时候打扰你、数据怎么合并与分开。要改的地方直接在图上说位置就行（“第 2 张图右边那块太窄”）。</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>记忆 · 交互原型</title>
+<style>
+  :root{
+    --ink:#1f2933; --sub:#5b6b7c; --line:#dce5ee; --line2:#c7d4e1;
+    --bg:#eef2f6; --card:#fff; --accent:#2b6cb0; --accent2:#e8f1fa;
+    --ok:#2f855a; --warn:#b7791f; --danger:#c53030; --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+    background:var(--bg); color:var(--ink); font-size:13.5px;
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:24px; -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    width:1080px; max-width:100%; height:700px; background:var(--card);
+    border-radius:16px; box-shadow:0 12px 40px rgba(16,42,67,.14);
+    display:flex; flex-direction:column; overflow:hidden; position:relative;
+  }
+  /* header */
+  header{height:58px; flex:none; display:flex; align-items:center; gap:10px;
+    padding:0 18px; border-bottom:1px solid var(--line)}
+  header h1{font-size:15px; font-weight:600; letter-spacing:.4px}
+  header .grow{flex:1}
+  .iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid transparent;
+    background:transparent;cursor:pointer;color:var(--sub);font-size:15px;
+    display:inline-flex;align-items:center;justify-content:center}
+  .iconbtn:hover{background:#f0f4f8;color:var(--ink)}
+  /* body */
+  .body{flex:1; display:flex; min-height:0}
+  aside{width:212px; flex:none; border-right:1px solid var(--line);
+    padding:14px 10px; overflow:auto}
+  aside .lbl{font-size:11.5px;color:var(--sub);padding:0 8px 8px}
+  .wsitem{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:9px;
+    cursor:pointer;color:var(--ink);margin-bottom:2px;border:1px solid transparent}
+  .wsitem:hover{background:#f5f8fa}
+  .wsitem.on{background:var(--accent2);border-color:#bcd8f2}
+  .wsitem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wsdel{opacity:0;flex:0 0 auto;width:18px;height:18px;padding:0;border:0;border-radius:5px;
+    background:transparent;color:var(--sub);font-size:13px;line-height:18px;text-align:center;cursor:pointer}
+  .wsitem:hover .wsdel{opacity:1}
+  .wsdel:hover{background:#fdecec;color:#c0392b}
+  .badge{font-size:10.5px;color:var(--accent);background:#e8f1fa;border-radius:999px;
+    padding:1px 7px;border:1px solid #cfe3f6}
+  .badge.grey{color:var(--sub);background:#f2f5f8;border-color:var(--line2)}
+  main{flex:1; min-width:0; padding:14px 18px; overflow:auto}
+  .tabs{display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .tab{padding:6px 13px;border-radius:8px;cursor:pointer;color:var(--sub);
+    border:1px solid transparent;font-size:13px}
+  .tab:hover{background:#f5f8fa}
+  .tab.on{background:var(--accent);color:#fff}
+  .tab .ro{font-size:10px;margin-left:5px;opacity:.85;border:1px solid currentColor;
+    border-radius:4px;padding:0 4px;vertical-align:1px}
+  .sec{font-size:11.5px;color:var(--sub);margin:16px 0 8px;display:flex;gap:8px;align-items:center}
+  .sec:first-child{margin-top:0}
+  .chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:8px}
+  .lex{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .lex b{font-weight:400;font-size:12px;padding:3px 9px;border:1px dashed var(--line2);
+    border-radius:20px;background:#fbfdff;color:#3d5f80;cursor:pointer}
+  .lex b:hover{border-color:#a9c6e4;background:#f2f8ff;color:#1c4b7c}
+  .lex b.used{opacity:.4;cursor:default}
+  .ev summary{cursor:pointer;font-size:11.5px;color:var(--sub);outline:none}
+  .ev summary::-webkit-details-marker{display:none}
+  .ev summary:before{content:'▾ ';font-size:9px;opacity:.7}
+  .ev:not([open]) summary:before{content:'▸ '}
+  .pl{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:13px;flex-wrap:wrap}
+  .pl:hover{background:#f7fafd}
+  .pl b{font-weight:600}
+  .field .pl .pi{width:44px;flex:0 0 auto;text-align:center;padding:3px 4px;border:1px solid var(--line2);
+    border-radius:6px;font-size:12px;font-family:inherit;color:var(--ink)}
+  .pn{font-size:11.5px;color:var(--sub)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+  .inline3{display:flex;gap:18px}
+  .opt.inline{margin:0}
+  .opt.inline span{font-size:13px}
+  .chip{display:flex;align-items:center;gap:8px;border:1px solid var(--line2);
+    border-radius:9px;padding:7px 11px;background:#fff;cursor:pointer;font-size:13px;
+    justify-content:space-between}
+  .chip:hover{border-color:#a9c6e4;background:#fbfdff}
+  .chip .bars{display:flex;gap:2px}
+  .bars i{width:7px;height:12px;border-radius:2px;background:#e3ebf3;display:block}
+  .bars i.f{background:#7aa9d6}
+  .row{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid transparent;
+    border-radius:9px;cursor:pointer}
+  .row:hover{background:#f8fbfd;border-color:#e4edf5}
+  .row.on{background:var(--accent2);border-color:#c9e0f4}
+  .row .txt{flex:1;line-height:1.55}
+  .row .side{font-size:11.5px;color:var(--sub);white-space:nowrap;padding-top:2px}
+  .acts{display:flex;gap:4px;opacity:0;transition:.12s}
+  .row:hover .acts,.chip:hover .acts{opacity:1}
+  .acts button{font-size:11.5px;border:1px solid var(--line2);background:#fff;border-radius:6px;
+    padding:2px 7px;cursor:pointer;color:var(--sub)}
+  .acts button:hover{color:var(--ink);border-color:#a9c6e4}
+  .acts button.del:hover{color:var(--danger);border-color:#f0b8b8;background:#fff6f6}
+  .pending{border:1px dashed #c9d8e6;background:#fcfeff;border-radius:10px;padding:12px}
+  .pending .h{font-size:11.5px;color:var(--accent);margin-bottom:8px}
+  .pending .t{line-height:1.6;margin-bottom:10px}
+  .btn{border:1px solid var(--line2);background:#fff;border-radius:8px;padding:6px 14px;
+    cursor:pointer;font-size:12.5px;color:var(--ink);font-family:inherit}
+  .btn:hover{border-color:#a9c6e4;background:#fbfdff}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#255d99}
+  .btn.danger{color:var(--danger);border-color:#f0c4c4}
+  .btn.ghost{border-style:dashed}
+  .empty{color:var(--sub);text-align:center;padding:36px 10px;line-height:1.9}
+  .empty .big{font-size:14px;color:var(--ink);margin-bottom:6px}
+  /* drawer */
+  .drawer{width:252px;flex:none;border-left:1px solid var(--line);padding:14px 16px;
+    overflow:auto;background:#fcfdff}
+  .drawer h3{font-size:12px;color:var(--sub);font-weight:500;margin-bottom:12px}
+  .kv{margin-bottom:10px;line-height:1.6}
+  .kv .k{font-size:11px;color:var(--sub)}
+  .kv .v{font-size:12.5px}
+  .hr{height:1px;background:var(--line);margin:12px 0}
+  .quote{background:#f5f8fa;border-left:2px solid #c9d8e6;padding:7px 9px;border-radius:0 6px 6px 0;
+    font-size:12px;color:#3e4c59;line-height:1.6}
+  .hist{font-size:11.5px;color:var(--sub);line-height:1.7}
+  /* footer */
+  footer{height:56px;flex:none;border-top:1px solid var(--line);display:flex;
+    align-items:center;justify-content:flex-end;gap:8px;padding:0 18px}
+  /* modal */
+  .mask{position:fixed;inset:0;background:rgba(23,38,53,.34);display:flex;
+    align-items:center;justify-content:center;z-index:50;padding:24px}
+  .modal{width:520px;max-width:100%;background:#fff;border-radius:14px;
+    box-shadow:0 20px 60px rgba(16,42,67,.28);overflow:hidden;
+    animation:pop .14s ease-out}
+  @keyframes pop{from{transform:translateY(6px) scale(.99);opacity:.6}to{transform:none;opacity:1}}
+  .modal .mh{padding:14px 18px;border-bottom:1px solid var(--line);font-size:13.5px;
+    font-weight:600;display:flex;align-items:center}
+  .modal .mh .x{margin-left:auto;cursor:pointer;color:var(--sub);font-size:15px}
+  .modal .mc{padding:15px 18px;max-height:78vh;overflow:auto}
+  .modal .mf{padding:12px 18px;border-top:1px solid var(--line);display:flex;
+    justify-content:flex-end;gap:8px;align-items:center}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:6px}
+  .field input[type=text],.field textarea,.field select{width:100%;padding:8px 10px;
+    border:1px solid var(--line2);border-radius:8px;font-size:13px;font-family:inherit;
+    color:var(--ink);background:#fff}
+  .field textarea{min-height:76px;resize:vertical;line-height:1.6}
+  .opt{display:flex;gap:9px;align-items:flex-start;padding:6px 10px;border-radius:8px;cursor:pointer}
+  .opt:hover{background:#f5f8fa}
+  .opt input{margin-top:3px}
+  .opt .sub{font-size:11.5px;color:var(--sub);margin-top:2px}
+  .tt{display:grid;grid-template-columns:1fr 66px 66px;gap:0;font-size:12.5px}
+  .tt>div{padding:7px 6px;border-bottom:1px solid var(--line)}
+  .tt .hd{font-size:11px;color:var(--sub);border-bottom:1px solid var(--line2)}
+  .tt .c{text-align:center}
+  .switch{width:34px;height:19px;border-radius:999px;background:#d5dee8;position:relative;
+    cursor:pointer;display:inline-block;transition:.15s}
+  .switch.on{background:var(--accent)}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;
+    border-radius:50%;background:#fff;transition:.15s}
+  .switch.on::after{left:17px}
+  .tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:5px;
+    background:#f2f5f8;color:var(--sub);border:1px solid var(--line2)}
+  .tag.blue{background:#e8f1fa;color:var(--accent);border-color:#cfe3f6}
+  .tag.hard{background:#fdecec;color:#c0392b;border-color:#f6cfcf}
+  #toast{position:fixed;left:50%;bottom:38px;transform:translateX(-50%);z-index:80;
+    display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{background:#172635;color:#fff;font-size:12.5px;padding:9px 14px;border-radius:10px;
+    display:flex;gap:12px;align-items:center;pointer-events:auto;
+    box-shadow:0 8px 24px rgba(16,42,67,.3);animation:pop .16s}
+  .toast b{cursor:pointer;color:#8ec5f5;font-weight:500}
+  .note{font-size:11.5px;color:var(--sub);line-height:1.7}
+  .preview{background:#f7fafc;border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;font-size:12px;line-height:1.9;color:#3e4c59;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>记忆</h1>
+    <span class="grow"></span>
+    <button class="iconbtn" id="btnSettings" title="设置">⚙</button>
+    <button class="iconbtn" id="btnClose" title="关闭">✕</button>
+  </header>
+  <div class="body">
+    <aside id="sidebar"></aside>
+    <main id="main"></main>
+    <aside class="drawer" id="drawer"></aside>
+  </div>
+  <footer>
+    <button class="btn" id="btnCopy">复制…</button>
+    <button class="btn" id="btnClear">归档…</button>
+  </footer>
+</div>
+<div id="toast"></div>
+<div id="modals"></div>
+
+<script>
+/* ────────── 假数据 ────────── */
+const TYPES = {self:'人设卡', user:'画像', event:'事件'};
+let seq = 100;
+const nid = p => p + (++seq);
+
+const stores = {
+  ds: {
+    self: [
+      {id:'s1', kind:'trait', label:'耐心', intensity:4,
+       note:'被重复问同一件事时，先复述一遍问题再回答',
+       adaptedFor:'小笨鱼',
+       ev:['10-24 会话 · 「你连问了四遍同一件事」'],
+       hist:[{t:'10-24 23:41', what:'强度 5 → 4', why:'疑似不满，软收敛后确认'}],
+       snap:{intensity:5, note:'被重复问同一件事时，先复述一遍问题再回答'}},
+      {id:'s2', kind:'trait', label:'直接', intensity:4,
+       note:'结论先说，证据在后；不铺垫',
+       ev:['多次 · 「结论先说」']},
+      {id:'s3', kind:'trait', label:'傲娇', intensity:2,
+       note:'被夸的时候会岔开话题',
+       ev:['10-21 · 「你就直说想帮忙」']},
+      {id:'s4', kind:'note', text:'先给结论，再给证据'},
+      {id:'s5', kind:'note', text:'不确定就说不确定，不猜着装确定'},
+      {id:'s6', kind:'note', text:'不用 SendKeys 打中文，走剪贴板'}
+    ],
+    user: [
+      {id:'u1', text:'讨厌重复解释。第二次问多半不是没听懂，是对答案不满意', strength:4,
+       ev:['10-24 · 「你刚才不是说过了吗」'], merged:['u9']},
+      {id:'u2', text:'深夜写代码时话变少，愿意被直接指出问题', strength:3,
+       ev:['10-22 · 02:10 之后的三轮对话']},
+      {id:'u3', text:'对「被代做决定」敏感，钱、时间、承诺一定要先问', strength:5,
+       ev:['10-18 · 「谁让你替我答应的」']},
+      {id:'u4', text:'喜欢把设计聊透再动手，讨厌被打断思路', strength:4,
+       ev:['10-24 · 「先讨论后创造」']},
+      {id:'u5', text:'看得懂比喻，但更信具体的数字和出处', strength:3,
+       ev:['10-23 · 「报数字要给口径」']}
+    ],
+    event: [
+      {id:'e1', kind:'promise', title:'下周三前给 bsk 那个 bug 一个结论',
+       from:'用户', to:'DeepSeek Harness', due:'10-29', status:'open',
+       ev:['10-24 会话']},
+      {id:'e2', kind:'promise', title:'周五对一下记忆面板的线框',
+       from:'用户', to:'DeepSeek Harness', due:'10-31', status:'open',
+       ev:['10-24 会话']},
+      {id:'e3', kind:'mood', title:'那天你不太开心', day:'10-22', status:'kept',
+       feeling:'我没多问，只是在旁边把事做完了', ev:['10-22 21:40 起']}
+    ],
+    pending: []
+  },
+  dsh_system: {self:[], user:[], event:[], pending:[]},
+  shenghuo: {
+    self: [],
+    user: [
+      {id:'u21', text:'聊到相机和胶片时会突然话多', strength:3,
+       ev:['10-20 · 胶片冲洗那段']}
+    ],
+    event: [
+      {id:'e21', kind:'mood', title:'那晚你说有点累', day:'10-19', status:'kept',
+       feeling:'我没接话，把灯关了', ev:['10-19 23:12']}
+    ],
+    pending: []
+  }
+};
+const wsMeta = {
+  ds:        {name:'ds',         desktop:'Desktop\\ds'},
+  dsh_system:{name:'dsh_system', desktop:'Desktop\\dsh_system'},
+  shenghuo:  {name:'生活',        desktop:'Desktop\\生活'}
+};
+const links = { shenghuo: {self:'ds'} };   // 生活的人设共用自 ds
+const archive = [];
+
+/* ────────── 状态 ────────── */
+const state = {
+  ws:'ds', tab:'self', sel:null,
+  settings:{
+    self:{on:true, rec:true},
+    user:{on:true, rec:true},
+    event:{on:true, rec:true}
+  },
+  level:'half', greeting:'小笨鱼', agentName:'DeepSeek Harness',
+  lexicon:['耐心','温柔','傲娇','直接','安静','毒舌','认真','克制',
+           '好奇','护短','急性子','爱较真','有条理','话少','稳','爱逗你'],
+  firstRunDone:false,
+  orphans:[]
+};
+
+/* ────────── 工具 ────────── */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const activeTypes = () => Object.keys(TYPES).filter(t => state.settings[t].on);
+
+function linkedFrom(ws, type){ return links[ws] && links[ws][type]; }
+function dataOf(ws, type){
+  const src = linkedFrom(ws, type);
+  return (src && stores[src] ? stores[src][type] : stores[ws][type]) || [];
+}
+function sharedIn(ws){ return Object.keys(links[ws] || {}); }        // 我从别处共用来的
+function sharedAs(ws){                                              // 别人共用了我什么
+  const out = [];
+  for (const w in links) for (const t in links[w]) if (links[w][t] === ws) out.push(t);
+  return out;
+}
+
+function toast(msg, undo){
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = '<span>' + esc(msg) + '</span>' + (undo ? '<b>撤销</b>' : '');
+  if (undo) el.querySelector('b').onclick = () => { undo(); el.remove(); render(); };
+  $('#toast').appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+/* ────────── 渲染：侧栏 ────────── */
+function renderSidebar(){
+  const w = sharedAs(state.ws).length
+    ? ''
+    : '';
+  let html = '<div class="lbl">工作区</div>';
+  for (const id in wsMeta){
+    const out = sharedIn(id).length;
+    const inn = sharedAs(id).length;
+    let badge = '';
+    if (inn) badge = '<span class="badge">↔ ' + inn + '</span>';
+    else if (out){
+      const from = links[id][sharedIn(id)[0]];
+      badge = '<span class="badge grey">共用自 ' + esc(wsMeta[from].name) + '</span>';
+    }
+    html += '<div class="wsitem' + (id === state.ws ? ' on' : '') + '" data-ws="' + id + '">'
+         +  '<span class="nm">▸ ' + esc(wsMeta[id].name) + '</span>' + badge
+         +  '<button class="wsdel" data-act="delws" title="删除工作区">×</button></div>';
+  }
+  $('#sidebar').innerHTML = html;
+}
+
+/* ────────── 渲染：主区 ────────── */
+function bar(n, max){
+  let h = '<span class="bars">';
+  for (let i = 1; i <= (max || 5); i++) h += '<i class="' + (i <= n ? 'f' : '') + '"></i>';
+  return h + '</span>';
+}
+
+function renderTabs(){
+  const ts = activeTypes();
+  if (!ts.includes(state.tab)) state.tab = ts[0] || 'self';
+  return '<div class="tabs">' + ts.map(t => {
+    const ro = state.settings[t].rec ? '' : '<span class="ro">只读</span>';
+    const n = dataOf(state.ws, t).length;
+    return '<div class="tab' + (t === state.tab ? ' on' : '') + '" data-tab="' + t + '">'
+      + TYPES[t] + (t === 'event' && (stores[state.ws].pending || []).length ? ' (' + stores[state.ws].pending.length + ')' : '')
+      + ro + '</div>';
+  }).join('') + '</div>';
+}
+
+function renderSelf(){
+  const items = dataOf(state.ws, 'self');
+  const shared = !!linkedFrom(state.ws, 'self');
+  const traits = items.filter(i => i.kind === 'trait');
+  const notes  = items.filter(i => i.kind !== 'trait');
+  let h = '';
+  if (!items.length) return emptyBlock('人设卡');
+  h += '<div class="sec">大类' + (shared ? '　<span class="tag blue">共用 · 来自 ' + esc(wsMeta[linkedFrom(state.ws,'self')].name) + '</span>' : '') + '</div>';
+  h += '<div class="chips">' + traits.map(i =>
+    '<div class="chip" data-type="self" data-id="' + i.id + '">' + esc(i.label) + bar(i.intensity) +
+    '<span class="acts"><button data-act="edit">编辑</button><button data-act="del" class="del">删</button>'
+    + (i.snap ? '<button data-act="undo">悔一步</button>' : '') + '</span></div>').join('') + '</div>';
+  if (notes.length){
+    h += '<div class="sec">人格补充　<span class="tag">硬的排在最前</span></div>';
+    h += notes.slice().sort((a,b) => (b.hard ? 1 : 0) - (a.hard ? 1 : 0)).map(i =>
+      '<div class="row" data-type="self" data-id="' + i.id + '"><div class="txt">· ' + esc(i.text)
+      + (i.hard ? ' <span class="tag hard">硬</span>' : '')
+      + (i.fixed ? ' <span class="tag">原样</span>' : '') + '</div>'
+      + '<span class="acts"><button data-act="edit">编辑</button><button data-act="del" class="del">删</button></span></div>').join('');
+  }
+  h += '<div class="sec"></div><button class="btn ghost" id="addSelf">＋ 加大类 / 加补充</button>'
+    + ' <button class="btn ghost" id="pasteSelf">粘贴一整段人设…</button>';
+  return h;
+}
+
+function renderUser(){
+  const items = dataOf(state.ws, 'user');
+  if (!items.length) return emptyBlock('画像');
+  let h = '<div class="sec">我对你的印象　<span class="tag">共 ' + items.length + ' 条</span></div>';
+  h += items.map(i =>
+    '<div class="row' + (state.sel && state.sel.id === i.id ? ' on' : '') + '" data-type="user" data-id="' + i.id + '">'
+    + '<div class="txt">' + esc(i.text) + '</div>'
+    + '<div class="side">' + bar(i.strength) + '</div>'
+    + '<span class="acts"><button data-act="del" class="del">删</button></span></div>').join('');
+  return h;
+}
+
+function renderEvent(){
+  const pend = stores[state.ws].pending;
+  const items = dataOf(state.ws, 'event');
+  let h = '';
+  if (pend.length){
+    h += '<div class="sec">待你决定</div>';
+    h += pend.map(p =>
+      '<div class="pending" style="margin-bottom:10px"><div class="h">' + esc(p.kind === 'promise' ? '承诺' : '约定') + '</div>'
+      + '<div class="t">' + esc(p.title) + (p.due ? '<br><span class="note">期限 ' + esc(p.due) + '</span>' : '') + '</div>'
+      + '<button class="btn primary" data-keep="' + p.id + '">记住</button> '
+      + '<button class="btn" data-drop="' + p.id + '">先不用</button></div>').join('');
+  }
+  if (items.length){
+    h += '<div class="sec">已记</div>';
+    h += items.map(i => {
+      const side = i.kind === 'mood' ? esc(i.day || '') : (i.status === 'open' ? '我记着 / ' + esc(i.due || '') : (i.status === 'done' ? '已兑现' : '已作废'));
+      return '<div class="row' + (state.sel && state.sel.id === i.id ? ' on' : '') + '" data-type="event" data-id="' + i.id + '">'
+        + '<div class="txt">' + (i.kind === 'mood' ? '情绪 · ' : '承诺 · ') + esc(i.title) + '</div>'
+        + '<div class="side">' + side + '</div>'
+        + '<span class="acts"><button data-act="del" class="del">删</button></span></div>';
+    }).join('');
+  }
+  h += '<div class="sec"></div><button class="btn ghost" id="demoAsk">演示：我弹一条询问</button>';
+  h += '<div class="note" style="margin-top:8px">到期由我提一句，不用你手动改状态。要它消失，删掉就行。</div>';
+  if (!pend.length && !items.length) h = emptyBlock('事件') + h;
+  return h;
+}
+
+function emptyBlock(name){
+  return '<div class="empty"><div class="big">这个工作区还没有' + name + '</div>'
+    + (name === '人设卡'
+        ? '不填问卷，也不问你要人设。<br>它会从我们在这里的相处里慢慢长出来。'
+        : '它就是空的。空着也挺好。')
+    + '<div style="margin-top:16px"><button class="btn" id="btnImportEmpty">从别的工区导入…</button></div></div>';
+}
+
+function renderMain(){
+  let h = renderTabs();
+  if (state.sel && !(state.settings[state.tab] || {}).on) state.sel = null;
+  if (state.tab === 'self')  h += renderSelf();
+  if (state.tab === 'user')  h += renderUser();
+  if (state.tab === 'event') h += renderEvent();
+  $('#main').innerHTML = h;
+}
+
+/* ────────── 渲染：详情抽屉 ────────── */
+function renderDrawer(){
+  const d = $('#drawer');
+  const sel = state.sel;
+  if (!sel){ d.innerHTML = '<h3>详情</h3><div class="note">点左边任意一条，这里会显示它的来源、改动史，以及能不能悔一步。</div>'; return; }
+  const arr = dataOf(state.ws, sel.type);
+  const it = arr.find(x => x.id === sel.id);
+  if (!it){ d.innerHTML = '<h3>详情</h3><div class="note">这条不在了。</div>'; return; }
+  let h = '<h3>详情 · ' + TYPES[sel.type] + '</h3>';
+  if (linkedFrom(state.ws, sel.type)) h += '<div class="kv"><div class="v"><span class="tag blue">共用数据 · 来自 ' + esc(wsMeta[linkedFrom(state.ws, sel.type)].name) + '</span></div><div class="note" style="margin-top:6px">改它，两个工作区一起变。</div></div><div class="hr"></div>';
+
+  if (sel.type === 'self' && it.kind === 'trait'){
+    h += '<div class="kv"><div class="k">大类</div><div class="v">' + esc(it.label) + '</div></div>'
+      +  '<div class="kv"><div class="k">强度（点格子可调）</div><div class="v" id="intensity">'
+      +  Array.from({length:5}, (_, k) => '<span class="bars" style="display:inline-flex;margin-right:1px"><i class="' + (k < it.intensity ? 'f' : '') + '" data-iv="' + (k+1) + '" style="cursor:pointer;width:12px;height:15px"></i></span>').join('')
+      +  ' <span class="note">' + it.intensity + '/5</span></div></div>';
+    if (it.note) h += '<div class="kv"><div class="k">补充</div><div class="v">' + esc(it.note) + '</div></div>';
+    if (it.adaptedFor) h += '<div class="kv"><div class="k">为谁调过</div><div class="v">' + esc(it.adaptedFor) + '</div></div>';
+  } else if (sel.type === 'self'){
+    h += '<div class="kv"><div class="v">' + esc(it.text) + '</div></div>';
+  } else if (sel.type === 'user'){
+    h += '<div class="kv"><div class="v">' + esc(it.text) + '</div></div>'
+      +  '<div class="kv"><div class="k">强度</div><div class="v">' + bar(it.strength) + '</div></div>';
+    if (it.merged) h += '<div class="kv"><div class="k">合并过</div><div class="v">' + it.merged.length + ' 条</div></div>';
+  } else {
+    h += '<div class="kv"><div class="k">' + (it.kind === 'mood' ? '这件事' : '内容') + '</div><div class="v">' + esc(it.title) + '</div></div>';
+    if (it.kind === 'promise') h += '<div class="kv"><div class="k">谁对谁</div><div class="v">' + esc(it.from) + ' → ' + esc(it.to) + '</div></div>'
+      + '<div class="kv"><div class="k">期限</div><div class="v">' + esc(it.due || '—') + '</div></div>'
+      + '<div class="kv"><div class="k">状态</div><div class="v">' + ({open:'未兑现',done:'已兑现',void:'已作废'}[it.status] || it.status) + '</div></div>';
+    if (it.feeling) h += '<div class="kv"><div class="k">我的感受</div><div class="v">' + esc(it.feeling) + '</div></div>';
+  }
+
+  if (it.ev && it.ev.length){
+    h += '<div class="hr"></div><details class="ev" open><summary>证据（原话）· ' + it.ev.length + ' 条</summary>'
+      + it.ev.map(e => '<div class="quote" style="margin-top:6px">' + esc(e) + '</div>').join('') + '</details>';
+  }
+  h += '<div class="hr"></div><div class="kv"><div class="k">挡位</div><div class="v">' + ({manual:'全手动',half:'半自动',active:'主动',auto:'全自动'}[state.level]) + '</div></div>';
+  if (it.hist && it.hist.length){
+    h += '<div class="kv"><div class="k">改过 ' + it.hist.length + ' 次</div><div class="hist">'
+      + it.hist.map(x => '· ' + esc(x.t) + '　' + esc(x.what) + (x.why ? '<br>　（' + esc(x.why) + '）' : '')).join('<br>') + '</div></div>';
+  }
+  if (it.snap) h += '<div style="margin-top:12px"><button class="btn" id="drawerUndo">悔一步</button></div>';
+  d.innerHTML = h;
+}
+
+/* ────────── 渲染总入口 ────────── */
+function render(){
+  renderSidebar();
+  renderMain();
+  renderDrawer();
+}
+
+/* ────────── 交互：主区 ────────── */
+document.addEventListener('click', e => {
+  const wsDel = e.target.closest('[data-act="delws"]');
+  if (wsDel){ openDelWs(wsDel.closest('.wsitem').dataset.ws); return; }
+
+  const ws = e.target.closest('.wsitem');
+  if (ws){ state.ws = ws.dataset.ws; state.sel = null; render(); return; }
+
+  const tab = e.target.closest('.tab');
+  if (tab){ state.tab = tab.dataset.tab; state.sel = null; render(); return; }
+
+  const act = e.target.closest('[data-act]');
+  if (act){
+    const host = act.closest('[data-id]');
+    if (host){ handleAct(act.dataset.act, host.dataset.type, host.dataset.id); return; }
+  }
+
+  const keep = e.target.closest('[data-keep]');
+  if (keep){ keepEvent(keep.dataset.keep, true); return; }
+  const drop = e.target.closest('[data-drop]');
+  if (drop){ keepEvent(drop.dataset.drop, false); return; }
+
+  if (e.target.id === 'addSelf'){ openEditor({type:'self', item:null}); return; }
+  if (e.target.id === 'pasteSelf'){ openPaste(); return; }
+  if (e.target.id === 'demoAsk'){ askEvent(); return; }
+  if (e.target.id === 'btnImportEmpty'){ openCopy(); return; }
+  if (e.target.id === 'drawerUndo'){ doUndo(state.sel.type, state.sel.id); return; }
+
+  const iv = e.target.closest('[data-iv]');
+  if (iv){
+    const arr = dataOf(state.ws, state.sel.type);
+    const it = arr.find(x => x.id === state.sel.id);
+    if (it){ snap(it); it.intensity = +iv.dataset.iv; it.hist = (it.hist||[]).concat([{t:'刚刚', what:'强度 → ' + it.intensity, why:'详情里手动调'}]); render(); }
+    return;
+  }
+
+  const row = e.target.closest('[data-id]');
+  if (row && !e.target.closest('.acts')){
+    state.sel = {type: row.dataset.type, id: row.dataset.id};
+    render();
+  }
+});
+
+function snap(it){
+  if (it.kind === 'trait') it.snap = {intensity: it.intensity, note: it.note, label: it.label};
+  else it.snap = {text: it.text, title: it.title};
+}
+
+function handleAct(act, type, id){
+  const arr = dataOf(state.ws, type);
+  const idx = arr.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const it = arr[idx];
+  if (act === 'edit'){ openEditor({type, item: it}); return; }
+  if (act === 'del'){
+    const removed = arr.splice(idx, 1)[0];
+    state.sel = null;
+    render();
+    toast('已删除：' + short(it), () => { arr.splice(idx, 0, removed); render(); });
+    return;
+  }
+  if (act === 'undo'){ doUndo(type, id); return; }
+}
+
+function short(it){ return (it.label || it.text || it.title || '').slice(0, 12); }
+
+function doUndo(type, id){
+  const arr = dataOf(state.ws, type);
+  const it = arr.find(x => x.id === id);
+  if (!it || !it.snap) return;
+  const s = it.snap;
+  if (it.kind === 'trait'){ it.intensity = s.intensity != null ? s.intensity : it.intensity; it.note = s.note != null ? s.note : it.note; if (s.label) it.label = s.label; }
+  else { if (s.text != null) it.text = s.text; if (s.title != null) it.title = s.title; }
+  it.snap = null;
+  render(); toast('已回退到手动修改之前');
+}
+
+/* ────────── 事件 ────────── */
+const ASK_VARIANTS = [
+  {title:'你答应过的，我记着', body:'下周三前，bsk 那个 bug 你会给我一个结论。', yes:'留着', no:'先不用'},
+  {title:'这个我想留着', body:'你讲 bsk 插件热生效的那段，讲得很投入。', yes:'收下', no:'先不用'},
+  {title:'那天不太好，我在', body:'10-22 晚上你说有点撑不住，我记了一笔。', yes:'记着', no:'算了'}
+];
+let askIdx = 0;
+function askEvent(){
+  const v = ASK_VARIANTS[askIdx % ASK_VARIANTS.length]; askIdx++;
+  openModal('ask', `
+    <div class="mh">${esc(v.title)}<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      <div style="line-height:1.8">${esc(v.body)}</div>
+      <div class="note" style="margin-top:10px">这句话我收着？</div>
+    </div>
+    <div class="mf"><button class="btn" data-no>${esc(v.no)}</button><button class="btn primary" data-yes>${esc(v.yes)}</button></div>`);
+  $('[data-yes]').onclick = () => {
+    stores[state.ws].pending.push({id:nid('p'), kind:'promise', title:v.body, due:'11-02'});
+    closeModal(); state.tab = 'event'; render(); toast('收下了，一会儿等你决定');
+  };
+  $('[data-no]').onclick = () => { closeModal(); toast('没记。下次再遇到我还问。'); };
+}
+
+function keepEvent(id, keep){
+  const list = stores[state.ws].pending;
+  const i = list.findIndex(p => p.id === id);
+  if (i < 0) return;
+  const p = list.splice(i, 1)[0];
+  if (keep){
+    const item = {id:nid('e'), kind:'promise', title:p.title, from:'用户', to:state.agentName,
+      due:p.due, status:'open', ev:['刚刚的对话']};
+    dataOf(state.ws, 'event').push(item);
+    render(); toast('记住了');
+  } else { render(); toast('没记'); }
+}
+
+/* ────────── 弹窗基础 ────────── */
+function openModal(kind, html){
+  $('#modals').innerHTML = '<div class="mask" data-mask="' + kind + '"><div class="modal">' + html + '</div></div>';
+  const mask = $('#modals .mask');
+  mask.addEventListener('click', ev => { if (ev.target === mask) closeModal(); });
+  mask.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+}
+function closeModal(){ $('#modals').innerHTML = ''; render(); }
+
+/* ────────── 编辑 ────────── */
+function openEditor({type, item}){
+  const isTrait = !item || item.kind === 'trait';
+  const isNote  = item && item.kind === 'note';
+  let body = '';
+  if (type === 'self' && isTrait){
+    body = `${item ? '' : `<div class="field"><label>加什么</label><select id="fKind">
+        <option value="trait">大类（带强度）</option><option value="note">人格补充（一句话）</option></select></div>`}
+      <div class="field" id="wrapLabel"><label>大类名字</label><input type="text" id="fLabel" value="${item ? esc(item.label) : ''}" placeholder="耐心 / 温柔 / 傲娇…"></div>
+      ${item ? '' : `<div class="field"><label>词库只是省事，不是限定</label>
+        <div class="lex">${state.lexicon.map(w => '<b data-lex="' + esc(w) + '">' + esc(w) + '</b>').join('')}</div>
+        <div class="note" style="margin-top:6px">点了就填进去；聊天里长出新词，直接写在上面那格。</div></div>`}
+      <div class="field" id="wrapInt"><label>强度（0–5）</label><input type="text" id="fInt" value="${item ? item.intensity : 3}"></div>
+      <div class="field"><label>补充说明（可选）</label><textarea id="fNote" placeholder="行事作风，比如「被重复问时先复述一遍问题」">${item ? esc(item.note || '') : ''}</textarea></div>
+      <div id="wrapHard"><label class="opt"><input type="checkbox" id="fHard"><span>标为硬约束<div class="sub">注入时排在人格补充最前面，不参与归纳</div></span></label></div>`;
+  } else if (type === 'self'){
+    body = `<div class="field"><label>人格补充</label><textarea id="fNote">${esc(item.text)}</textarea></div>
+      <label class="opt"><input type="checkbox" id="fHard"${item.hard ? ' checked' : ''}><span>标为硬约束<div class="sub">注入时排在人格补充最前面，不参与归纳</div></span></label>`;
+  } else {
+    body = `<div class="field"><label>内容</label><textarea id="fText">${esc(item.text || item.title || '')}</textarea></div>`;
+  }
+  openModal('edit', `
+    <div class="mh">${item ? '编辑' : '新增'}${isNote ? '人格补充' : (type === 'self' ? '大类' : TYPES[type])}<span class="x" data-close>✕</span></div>
+    <div class="mc">${body}
+      <div class="note">手动改过的条目才会出现「悔一步」，而且只悔一步——再聊一次天，快照就没了。</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="saveEdit">保存</button></div>`);
+
+  if ($('#fKind')){
+    const sync = () => {
+      const t = $('#fKind').value === 'trait';
+      if ($('#wrapLabel')) $('#wrapLabel').style.display = t ? '' : 'none';
+      if ($('#wrapInt')) $('#wrapInt').style.display = t ? '' : 'none';
+      if ($('#wrapHard')) $('#wrapHard').style.display = t ? 'none' : '';
+      const lexField = $('#fLabel') && $('#fLabel').closest('.field').nextElementSibling;
+      if (lexField) lexField.style.display = t ? '' : 'none';
+    };
+    $('#fKind').onchange = sync; sync();
+  }
+  document.querySelectorAll('[data-lex]').forEach(b => b.onclick = () => {
+    if ($('#fLabel')) { $('#fLabel').value = b.dataset.lex; $('#fLabel').focus(); }
+  });
+
+  $('#saveEdit').onclick = () => {
+    const arr = dataOf(state.ws, type);
+    if (!item){
+      const kind = $('#fKind') ? $('#fKind').value : (type === 'self' ? 'trait' : 'impression');
+      let it;
+      if (type === 'self' && kind === 'trait'){
+        it = {id:nid('s'), kind:'trait', label:$('#fLabel').value || '未命名',
+              intensity:Math.max(0, Math.min(5, +$('#fInt').value || 0)),
+              note:$('#fNote').value, ev:['手动添加']};
+      } else if (type === 'self'){
+        it = {id:nid('s'), kind:'note', text:$('#fNote').value, hard:!!($('#fHard') && $('#fHard').checked), ev:['手动添加']};
+      } else {
+        it = {id:nid('u'), kind:'impression', text:$('#fText').value, strength:3, ev:['手动添加']};
+      }
+      arr.push(it);
+    } else {
+      snap(item);
+      if (item.kind === 'trait'){
+        item.label = $('#fLabel').value || item.label;
+        item.intensity = Math.max(0, Math.min(5, +$('#fInt').value || 0));
+        item.note = $('#fNote').value;
+        item.ev = (item.ev || []).concat(['手动修改']);
+      } else if (item.kind === 'note'){
+        item.text = $('#fNote').value;
+        item.hard = !!($('#fHard') && $('#fHard').checked);
+      } else {
+        item.text = $('#fText').value;
+        item.title = $('#fText').value;
+      }
+      item.hist = (item.hist || []).concat([{t:'刚刚', what:'手动修改', why:'你自己改的'}]);
+    }
+    closeModal(); render(); toast('已保存');
+  };
+}
+
+/* ────────── 粘贴一整段人设：拆成两桶 ────────── */
+const PASTE_DEMO = `你说话别绕弯子，先给结论再给证据。
+我讨厌别人一遍遍确认，能自己判断就自己判断，别再问我「需不需要继续」。
+不要用 emoji，也别在句尾加「希望这能帮到你」这种废话。
+技术上可以较真，但别咄咄逼人。`;
+
+let parsed = null;
+
+function openPaste(){
+  openModal('paste', `
+    <div class="mh">粘贴一整段人设<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      <div class="field"><label>粘在这儿</label>
+        <textarea id="pText" style="min-height:126px">${esc(PASTE_DEMO)}</textarea></div>
+      <div class="note" style="margin-bottom:4px">点「拆一拆」：我在会话里读它，拆成 <b>大类</b>（可归纳、带强度）和 <b>人格补充</b>（原样保留），再逐条给你过。</div>
+      <div id="pPrev"></div>
+    </div>
+    <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="doParse">拆一拆</button></div>`);
+
+  $('#doParse').onclick = () => {
+    parsed = {
+      traits:[{label:'直接', intensity:4, note:'先给结论，再给证据'},
+              {label:'较真', intensity:3, note:'技术上可以较真，但不咄咄逼人'}],
+      notes:[{text:'不要用 emoji', hard:true},
+             {text:'别问「需不需要继续」，能自己判断就自己判断', hard:true},
+             {text:'句尾别加「希望这能帮到你」这类客套', hard:true},
+             {text:'同一个问题问第二遍，回答要更短', hard:false}]
+    };
+    renderParse();
+    const b = $('#doParse');
+    b.id = 'applyPaste'; b.textContent = '落盘';
+    b.onclick = applyPaste;
+  };
+}
+
+function renderParse(){
+  let h = '<div class="hr"></div>';
+  h += '<div class="field"><label>大类（可调强度）</label>';
+  h += parsed.traits.map((t, i) =>
+    '<label class="pl"><input type="checkbox" data-pt="' + i + '" checked>'
+    + '<b>' + esc(t.label) + '</b>'
+    + '<input type="text" class="pi" data-pint="' + i + '" value="' + t.intensity + '">／5'
+    + (t.note ? '<span class="pn">' + esc(t.note) + '</span>' : '') + '</label>').join('');
+  h += '</div><div class="field"><label>人格补充（原样，不概括）</label>';
+  h += parsed.notes.map((n, i) =>
+    '<label class="pl"><input type="checkbox" data-pn="' + i + '" checked><span>' + esc(n.text) + '</span>'
+    + (n.hard ? '<span class="tag hard">硬</span>' : '') + '<span class="tag">原样</span></label>').join('');
+  h += '</div><div class="note">勾掉的就是不要。大类可以改名、调强度；补充不给改——改过的字就不叫「原样保留」了。</div>';
+  $('#pPrev').innerHTML = h;
+}
+
+function applyPaste(){
+  const arr = dataOf(state.ws, 'self');
+  let n = 0;
+  document.querySelectorAll('[data-pt]').forEach(cb => {
+    if (!cb.checked) return;
+    const i = +cb.dataset.pt, t = parsed.traits[i];
+    const iv = Math.max(0, Math.min(5, +document.querySelector('[data-pint="' + i + '"]').value || t.intensity));
+    arr.push({id:nid('s'), kind:'trait', label:t.label, intensity:iv, note:t.note || '',
+              ev:['粘贴的人设'], hist:[{t:'刚刚', what:'从粘贴里拆出', why:'你贴了一段，按 A 路线拆'}]});
+    n++;
+  });
+  document.querySelectorAll('[data-pn]').forEach(cb => {
+    if (!cb.checked) return;
+    const pn = parsed.notes[+cb.dataset.pn];
+    arr.push({id:nid('s'), kind:'note', text:pn.text, hard:!!pn.hard, ev:['粘贴的人设'], fixed:true});
+    n++;
+  });
+  closeModal(); render();
+  toast('拆进来 ' + n + ' 条，之后按相处慢慢调');
+}
+
+/* ────────── 复制 / 共生 ────────── */
+function openCopy(){
+  const others = Object.keys(wsMeta).filter(w => w !== state.ws);
+  const mine = sharedIn(state.ws);
+  const src0 = others[0] || '';
+  openModal('copy', `
+    <div class="mh">从别的工作区导入<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      ${mine.length ? '<div class="field"><label>当前共用</label>' + mine.map(t =>
+          '<div class="row" style="align-items:center"><div class="txt">' + TYPES[t] + ' ← ' + esc(wsMeta[links[state.ws][t]].name) + '</div>'
+          + '<button class="btn" data-cut="' + t + '">切断共生</button></div>').join('') + '</div><div class="hr"></div>' : ''}
+      <div class="field"><label>从哪个工作区</label>
+        <select id="cSrc">${others.map(w => '<option value="' + w + '">' + esc(wsMeta[w].name) + '</option>').join('')}</select>
+      </div>
+      <div class="field"><label>复制哪些</label>
+        ${activeTypes().map(t => '<label class="opt"><input type="checkbox" data-t="' + t + '" checked><span>' + TYPES[t] + '</span></label>').join('')}
+      </div>
+      <div class="field"><label>怎么复制</label>
+        <label class="opt"><input type="radio" name="mode" value="copy" checked>
+          <span>副本复制<div class="sub">拷一份独立的，之后各走各的</div></span></label>
+        <label class="opt"><input type="radio" name="mode" value="share">
+          <span>共生转移<div class="sub">指向同一份数据，改一处两处都变</div></span></label>
+      </div>
+      <div class="preview" id="cPrev"></div>
+      <div class="note" style="margin-top:10px">同一模式会应用到所有勾选的类别；落盘前先给你看这个预览。</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>取消</button><button class="btn primary" id="doCopy">确认</button></div>`);
+
+  const prev = () => {
+    const src = $('#cSrc').value;
+    const mode = document.querySelector('input[name=mode]:checked').value;
+    const ts = [...document.querySelectorAll('[data-t]')].filter(c => c.checked).map(c => c.dataset.t);
+    if (!ts.length){ $('#cPrev').innerHTML = '<span class="note">什么都没勾。</span>'; return []; }
+    $('#cPrev').innerHTML = ts.map(t => {
+      const a = dataOf(state.ws, t).length, b = dataOf(src, t).length;
+      return mode === 'copy'
+        ? TYPES[t] + '：' + a + ' 条 → ' + (a + b) + ' 条（来自 ' + esc(wsMeta[src].name) + ' 的 ' + b + ' 条）'
+        : TYPES[t] + '：指向 ' + esc(wsMeta[src].name) + ' 的同一份（' + b + ' 条）';
+    }).join('<br>');
+    return ts;
+  };
+  prev();
+  ['#cSrc'].forEach(s => $(s).onchange = prev);
+  document.querySelectorAll('input[name=mode],[data-t]').forEach(el => el.onchange = prev);
+  document.querySelectorAll('[data-cut]').forEach(b => b.onclick = () => {
+    const t = b.dataset.cut; const src = links[state.ws][t];
+    stores[state.ws][t] = clone(stores[src][t]).map(x => ({...x, id:nid('x')}));
+    delete links[state.ws][t];
+    if (!Object.keys(links[state.ws]).length) delete links[state.ws];
+    closeModal(); render(); toast('已切断，现在是独立的一份');
+  });
+
+  $('#doCopy').onclick = () => {
+    const src = $('#cSrc').value;
+    const mode = document.querySelector('input[name=mode]:checked').value;
+    const ts = [...document.querySelectorAll('[data-t]')].filter(c => c.checked).map(c => c.dataset.t);
+    ts.forEach(t => {
+      if (mode === 'copy'){
+        if (linkedFrom(state.ws, t)){
+          stores[state.ws][t] = clone(dataOf(state.ws, t));
+          delete links[state.ws][t];
+          if (!Object.keys(links[state.ws]).length) delete links[state.ws];
+        }
+        const arr = stores[state.ws][t];
+        clone(dataOf(src, t)).forEach(x => {
+          const dup = arr.find(y => (y.label || y.text || y.title) === (x.label || x.text || x.title));
+          if (!dup) arr.push({...x, id:nid('c')});
+        });
+      } else {
+        links[state.ws] = links[state.ws] || {};
+        links[state.ws][t] = src;
+      }
+    });
+    closeModal(); state.sel = null; render();
+    toast(mode === 'share' ? '已共生，同一份数据' : '已复制一份独立的');
+  };
+}
+
+/* ────────── 归档（两步） ────────── */
+function openClear(){
+  const total = activeTypes().reduce((n, t) => n + dataOf(state.ws, t).length, 0);
+  openModal('clear', `
+    <div class="mh">归档「${esc(wsMeta[state.ws].name)}」的记忆<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      <div style="line-height:1.8">这会收走 <b>${total}</b> 条（${activeTypes().map(t => TYPES[t]).join(' · ')}），收进归档。</div>
+      <div class="note" style="margin-top:8px">不是永久删除：归档留在设置里，随时能恢复；真要永久删，得在设置里对那一条再动手。</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>算了</button><button class="btn danger" id="step1">继续</button></div>`);
+  $('#step1').onclick = () => {
+    openModal('clear2', `
+      <div class="mh">再确认一次<span class="x" data-close>✕</span></div>
+      <div class="mc"><div style="line-height:1.8">确定归到归档里？归档之后也能恢复。</div></div>
+      <div class="mf"><button class="btn danger" id="step2">确认归档</button><button class="btn" data-close>算了</button></div>`);
+    $('#step2').onclick = () => {
+      const pack = {};
+      activeTypes().forEach(t => {
+        const arr = dataOf(state.ws, t);
+        pack[t] = clone(arr);
+        arr.length = 0;                        // 数据本体清空（若是共生的，两边一起空）
+        if (stores[state.ws][t] !== arr) stores[state.ws][t].length = 0;
+        if (links[state.ws]) delete links[state.ws][t];
+      });
+      archive.push({ws:state.ws, at:'刚刚', pack});
+      closeModal(); state.sel = null; render();
+      toast('已归档，可在设置里恢复', () => {
+        activeTypes().forEach(t => { stores[state.ws][t] = clone(pack[t]); });
+        archive.pop(); render();
+      });
+    };
+  };
+}
+
+/* ────────── 删工作区 / 无主记忆 ────────── */
+function heirsOf(ws){
+  const out = [];
+  ['self','user','event'].forEach(t => {
+    const d = Object.keys(wsMeta).find(o => o !== ws && links[o] && links[o][t] === ws);
+    if (d) out.push(wsMeta[d].name);
+  });
+  return [...new Set(out)];
+}
+
+function openDelWs(ws){
+  const name = wsMeta[ws].name;
+  const heirs = heirsOf(ws);
+  openModal('delws', `
+    <div class="mh">删除工作区「${esc(name)}」<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      <p class="p">删的只是工作区。<b>记忆跟着数据走，不跟工作区走。</b></p>
+      <div class="ln">· 还有别人共用 → 它们接着用，一条不少${heirs.length ? '（' + esc(heirs.join('、')) + '）' : ''}</div>
+      <div class="ln">· 没人共用了 → 记忆进「无主记忆」，从列表里消失</div>
+      <div class="ln">· <b>不会顺手替你删</b>：真要删，得你到设置里点「永久删除」</div>
+    </div>
+    <div class="mf"><button class="btn" data-close>算了</button><button class="btn danger" id="dwOk">删除工作区</button></div>`);
+  $('#dwOk').onclick = () => { closeModal(); delWs(ws); };
+}
+
+function delWs(ws){
+  const name = wsMeta[ws].name;
+  const before = clone({ wsMeta, stores, links, orphans: state.orphans });
+  ['self','user','event'].forEach(t => {
+    const deps = Object.keys(wsMeta).filter(o => o !== ws && links[o] && links[o][t] === ws);
+    const arr = (stores[ws] && stores[ws][t]) || [];
+    if (deps.length){
+      const heir = deps[0];
+      if (stores[heir]) stores[heir][t] = arr;          // 继承同一份（共生关系不断）
+      if (links[heir]) delete links[heir][t];
+      deps.slice(1).forEach(d => { links[d] = links[d] || {}; links[d][t] = heir; });
+    } else if (arr.length){
+      state.orphans.push({ id: nid('orph'), from: name, t, n: arr.length, at: '刚刚', snap: clone(arr) });
+    }
+  });
+  delete stores[ws]; delete links[ws]; delete wsMeta[ws];
+  for (const id in links) for (const t in links[id]) if (links[id][t] === ws) delete links[id][t];
+  state.ws = Object.keys(wsMeta)[0] || 'ds'; state.tab = 'self'; state.sel = null;
+  render();
+  toast('已删除「' + name + '」，记忆没删', () => {
+    Object.keys(wsMeta).forEach(k => delete wsMeta[k]); Object.assign(wsMeta, before.wsMeta);
+    Object.keys(stores).forEach(k => delete stores[k]); Object.assign(stores, before.stores);
+    Object.keys(links).forEach(k => delete links[k]);   Object.assign(links, before.links);
+    state.orphans = before.orphans; state.ws = ws; render();
+  });
+}
+
+function restoreOrphan(id){
+  const o = state.orphans.find(x => x.id === id); if (!o) return;
+  let key, n = 1;
+  do { key = 'o' + (n++); } while (wsMeta[key]);
+  wsMeta[key] = { name: o.from + '（找回）' };
+  stores[key] = { self:[], user:[], event:[], pending:[] };
+  links[key] = {};
+  stores[key][o.t] = clone(o.snap);
+  state.orphans = state.orphans.filter(x => x.id !== id);
+  state.ws = key; state.tab = o.t; state.sel = null;
+  closeModal(); render(); toast('接回到「' + wsMeta[key].name + '」');
+}
+
+function purgeOrphan(btn, id){
+  if (btn.dataset.armed !== '1'){
+    btn.dataset.armed = '1'; btn.textContent = '再点一次';
+    setTimeout(() => { if (document.body.contains(btn)) { btn.dataset.armed = ''; btn.textContent = '永久删除'; } }, 2600);
+    return;
+  }
+  state.orphans = state.orphans.filter(x => x.id !== id);
+  closeModal(); openSettings(); render();
+}
+
+/* ────────── 设置 ────────── */
+function openSettings(){
+  openModal('set', `
+    <div class="mh">设置 · 记忆<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      <div class="field"><label>我该怎么称呼你</label><input type="text" id="sGreet" value="${esc(state.greeting)}"></div>
+      <div class="field"><label>我给自己起的名字</label><input type="text" id="sName" value="${esc(state.agentName)}"></div>
+
+      <div class="field"><label>记忆做到多细</label>
+        <div class="grid2">
+        ${[['manual','全手动','只有我说「记」才写'],['half','半自动','画像自动 · 承诺问我'],['active','主动','情绪也问我'],['auto','全自动','连承诺也直接记']]
+          .map(([v,n,d]) => '<label class="opt"><input type="radio" name="lvl" value="' + v + '"' + (state.level === v ? ' checked' : '') + '><span>' + n + '<div class="sub">' + d + '</div></span></label>').join('')}
+        </div>
+      </div>
+
+      <div class="field"><label>三个功能</label>
+        <div class="tt">
+          <div class="hd">功能</div><div class="hd c">启用</div><div class="hd c">记录</div>
+          ${activeOrder().map(t => '<div>' + TYPES[t] + '</div>'
+            + '<div class="c"><span class="switch' + (state.settings[t].on ? ' on' : '') + '" data-sw="on" data-t="' + t + '"></span></div>'
+            + '<div class="c"><span class="switch' + (state.settings[t].rec ? ' on' : '') + '" data-sw="rec" data-t="' + t + '"></span></div>').join('')}
+        </div>
+        <div class="note" style="margin-top:8px">「启用」管看不看得见、注不注入；「记录」管还要不要新增。<b>只关记录 ≠ 忘</b>。</div>
+      </div>
+
+      <div class="field"><label>默认词库（空格或逗号分隔）</label>
+        <textarea id="sLex" style="min-height:52px">${esc(state.lexicon.join(' '))}</textarea>
+        <div class="note" style="margin-top:6px">词库只负责省事：增大类时给你一排可点的词。<b>它不限定我</b>——聊天里长出新的，我照样直接写。</div>
+      </div>
+
+      <div class="field"><label>无主记忆（${state.orphans.length}）</label>
+        ${state.orphans.length ? state.orphans.map(o => '<div class="row"><div class="txt">' + esc(o.from) + ' · ' + TYPES[o.t] + ' ' + o.n + ' 条 · ' + o.at + '</div>'
+          + '<button class="btn" data-back="' + o.id + '">接回</button>'
+          + '<button class="btn danger" data-purge="' + o.id + '">永久删除</button></div>').join('')
+          : '<div class="note">没有。删掉的工作区如果没人共用，它的记忆会落到这里，不会当场消失。</div>'}
+      </div>
+
+      <div class="field"><label>归档（${archive.length}）</label>
+        ${archive.length ? archive.map((a,i) => '<div class="row"><div class="txt">' + esc(wsMeta[a.ws].name) + ' · ' + a.at + ' · ' + Object.keys(a.pack).length + ' 类</div><button class="btn" data-restore="' + i + '">恢复</button></div>').join('')
+          : '<div class="note">没有归档。</div>'}
+      </div>
+    </div>
+    <div class="mf"><button class="btn" data-close>关闭</button></div>`);
+
+  document.querySelectorAll('[data-sw]').forEach(sw => sw.onclick = () => {
+    const t = sw.dataset.t, k = sw.dataset.sw;
+    state.settings[t][k] = !state.settings[t][k];
+    sw.classList.toggle('on');
+    renderSidebar();
+  });
+  document.querySelectorAll('input[name=lvl]').forEach(r => r.onchange = () => { state.level = r.value; });
+  $('#sGreet').oninput = e => state.greeting = e.target.value;
+  $('#sName').oninput = e => state.agentName = e.target.value;
+  $('#sLex').oninput = e => {
+    state.lexicon = e.target.value.split(/[\s,，、]+/).map(s => s.trim()).filter(Boolean);
+  };
+  document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => restoreOrphan(b.dataset.back));
+  document.querySelectorAll('[data-purge]').forEach(b => b.onclick = () => purgeOrphan(b, b.dataset.purge));
+  document.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => {
+    const a = archive[+b.dataset.restore];
+    activeTypes().forEach(t => { if (a.pack[t]) stores[a.ws][t] = clone(a.pack[t]); });
+    archive.splice(+b.dataset.restore, 1);
+    closeModal(); render(); toast('已恢复');
+  });
+}
+function activeOrder(){ return ['self','user','event']; }
+
+/* ────────── 首启 ────────── */
+function firstRun(){
+  openModal('first', `
+    <div class="mh">我叫什么<span class="x" data-close>✕</span></div>
+    <div class="mc">
+      <div class="field"><label>我该怎么称呼你</label><input type="text" id="gGreet" value="小笨鱼"></div>
+      <div class="field"><label>我给自己起的名字</label><input type="text" id="gName" value="DeepSeek Harness"></div>
+      <div class="note" style="margin:2px 0 16px">不问你要人设，也不填性格问卷 —— 我自己长。</div>
+      <div class="field"><label>记忆做到多细（之后设置里可改）</label>
+        <div class="grid2">
+        ${[['manual','全手动','只有我说「记」才写'],['half','半自动','画像自动 · 承诺问我'],['active','主动','情绪也问我'],['auto','全自动','连承诺也直接记']]
+          .map(([v,n,d]) => '<label class="opt"><input type="radio" name="g" value="' + v + '"' + (v === 'half' ? ' checked' : '') + '><span>' + n + '<div class="sub">' + d + '</div></span></label>').join('')}
+        </div>
+      </div>
+      <div class="field"><label>开哪几个（之后在设置里可改）</label>
+        <div class="inline3">
+          <label class="opt inline"><input type="checkbox" data-g="self" checked><span>人设卡</span></label>
+          <label class="opt inline"><input type="checkbox" data-g="user" checked><span>画像</span></label>
+          <label class="opt inline"><input type="checkbox" data-g="event" checked><span>事件</span></label>
+        </div>
+        <div class="note" style="margin-top:6px">关掉的那个，在这里就不存在：不显示、不注入、也不记。</div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn primary" id="gStart">开始</button></div>`);
+  $('#gStart').onclick = () => {
+    const picked = [...document.querySelectorAll('[data-g]')].filter(c => c.checked).map(c => c.dataset.g);
+    if (!picked.length) { toast('至少留一个'); return; }
+    activeOrder().forEach(t => { state.settings[t].on = picked.includes(t); state.settings[t].rec = picked.includes(t); });
+    if (!picked.includes(state.tab)) state.tab = picked[0];
+    state.greeting = $('#gGreet').value || state.greeting;
+    state.agentName = $('#gName').value || state.agentName;
+    const r = document.querySelector('input[name=g]:checked'); if (r) state.level = r.value;
+    state.firstRunDone = true; closeModal(); render(); toast('好，开始记了');
+  };
+}
+
+/* ────────── 顶部按钮 ────────── */
+$('#btnSettings').onclick = openSettings;
+$('#btnCopy').onclick = openCopy;
+$('#btnClear').onclick = openClear;
+$('#btnClose').onclick = () => {
+  document.querySelector('.app').style.opacity = .35;
+  toast('原型里「关闭」只是示意：真插件里它回到聊天');
+  setTimeout(() => document.querySelector('.app').style.opacity = 1, 900);
+};
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+render();
+setTimeout(() => { if (!state.firstRunDone && !location.search.includes('skip')) firstRun(); }, 350);
+</script>
+</body>
+</html>
