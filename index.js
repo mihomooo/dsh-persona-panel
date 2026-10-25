@@ -192,6 +192,18 @@ function bootLog(error, where) {
 
 // ------------------------------------------------------------ workspaces
 
+// Everything written here ends up inside the system prompt, so it is flattened on
+// the way in: one line, no control characters, bounded length. A stored newline
+// would let an entry start its own paragraph in the prompt and read like an
+// instruction; collapsing it keeps memory as data.
+function cleanText(value, max = 600) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\u2028\u2029]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max)
+}
+
 function normalizeDir(dir) {
   if (typeof dir !== 'string' || !dir.trim()) return ''
   try {
@@ -930,13 +942,13 @@ function writeRememberRaw(live, dir, args) {
   const store = storeOf(live, dir)
   const features = settingsOf(live, dir).features
   const kind = args.kind
-  const ev = args.evidence ? [String(args.evidence).slice(0, 400)] : []
+  const ev = args.evidence ? [cleanText(args.evidence, 400)] : []
   if (kind === 'diary') {
     // The diary is mine, not a record of the user: append-only, first person,
     // and nothing downstream may rewrite it. It ignores the 记录挡位 on purpose —
     // that gate is about data taken from the user, not about me talking to myself.
     if (!features.diary?.rec) return { text: '日记关掉了，这条没写。' }
-    const text = String(args.text || '').trim().slice(0, 500)
+    const text = cleanText(args.text, 500)
     if (!text) return { text: '没给内容，没写。' }
     store.diary = store.diary || []
     const now = new Date()
@@ -955,17 +967,17 @@ function writeRememberRaw(live, dir, args) {
         found.hist = [...(found.hist || []), { at: '现在', what: '又见到一次，调了强度' }].slice(-8)
         return { text: `「${label}」已经在了，强度更新为 ${found.intensity}/5。` }
       }
-      store.self.unshift({ id: nextId(live, 't'), kind: 'trait', label, intensity: Math.max(0, Math.min(5, Number(args.intensity) || 3)), note: String(args.text || '').trim(), ev, hist: [{ at: '现在', what: '从对话里长出来的' }] })
+      store.self.unshift({ id: nextId(live, 't'), kind: 'trait', label, intensity: Math.max(0, Math.min(5, Number(args.intensity) || 3)), note: cleanText(args.text, 300), ev, hist: [{ at: '现在', what: '从对话里长出来的' }] })
       return { text: `记下大类「${label}」。` }
     }
-    store.self.push({ id: nextId(live, 'n'), kind: 'note', text: String(args.text).trim(), hard: !!args.hard, ev, hist: [{ at: '现在', what: '从对话里长出来的' }] })
+    store.self.push({ id: nextId(live, 'n'), kind: 'note', text: cleanText(args.text, 800), hard: !!args.hard, ev, hist: [{ at: '现在', what: '从对话里长出来的' }] })
     return { text: '记下一条人格补充。' }
   }
   if (kind === 'setting') {
     // Names and forms of address are state, not memories: when the user renames
     // me or tells me how to call them, the panel's setting is what has to change.
     const field = String(args.field || '').trim()
-    const value = String(args.text || '').trim().slice(0, 40)
+    const value = cleanText(args.text, 40)
     if (field !== 'agentName' && field !== 'userCall') {
       return { text: 'setting 只能是 agentName（我叫什么）、userCall（我怎么称呼你）。' }
     }
@@ -983,20 +995,20 @@ function writeRememberRaw(live, dir, args) {
     if (who) {
       if (!features.others?.rec) return { text: '别人的画像记录关掉了，这条没写。' }
       const other = ensureOther(store, who)
-      other.user.unshift({ id: nextId(live, 'u'), text: String(args.text).trim(), ev })
+      other.user.unshift({ id: nextId(live, 'u'), text: cleanText(args.text, 600), ev })
       audit(live, { op: 'addOtherUser', dir, who: other.name, id: other.user[0].id })
       return { text: `记下一条关于「${other.name}」的印象。` }
     }
     if (!features.user?.rec) return { text: '画像的记录关掉了，这条没写。' }
-    store.user.unshift({ id: nextId(live, 'u'), text: String(args.text).trim(), ev })
+    store.user.unshift({ id: nextId(live, 'u'), text: cleanText(args.text, 600), ev })
     return { text: '记下一条印象。' }
   }
   const eventWho = String(args.who || '').trim()
   const cap = Number(settingsOf(live, dir).eventsCap ?? 20)
   const eventShape = {
     kind: ['feeling', 'precious', 'work'].includes(args.eventKind) ? args.eventKind : 'promise',
-    text: String(args.text).trim(),
-    date: String(args.date || '').trim(),
+    text: cleanText(args.text, 600),
+    date: cleanText(args.date, 40),
     status: 'open',
     ev,
     important: !!args.important,
@@ -1418,9 +1430,9 @@ function applyOps(db, body) {
       store.self.unshift({
         id: nextId(db, 't'),
         kind: 'trait',
-        label: String(body.label || '').trim() || '未命名',
+        label: cleanText(body.label, 40) || '未命名',
         intensity: Math.max(0, Math.min(5, Number(body.intensity) || 0)),
-        note: String(body.note || '').trim(),
+        note: cleanText(body.note, 300),
         ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [],
         hist: [{ at: stamp(), what: '手动加的大类' }],
       })
@@ -1432,7 +1444,7 @@ function applyOps(db, body) {
       store.self.push({
         id: nextId(db, 'n'),
         kind: 'note',
-        text: String(body.text || '').trim() || '未命名',
+        text: cleanText(body.text, 800) || '未命名',
         hard: !!body.hard,
         ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [],
         hist: [{ at: stamp(), what: body.hard ? '手动加的硬约束' : '手动加的补充' }],
@@ -1451,12 +1463,12 @@ function applyOps(db, body) {
         const item = list.find((x) => x.id === body.id)
         if (!item) continue
         const before = JSON.stringify(item)
-        if (typeof body.label === 'string' && item.kind === 'trait') item.label = body.label.trim()
+        if (typeof body.label === 'string' && item.kind === 'trait') item.label = cleanText(body.label, 40)
         if (body.intensity !== undefined && item.kind === 'trait') item.intensity = Math.max(0, Math.min(5, Number(body.intensity) || 0))
-        if (typeof body.note === 'string' && item.kind === 'trait') item.note = body.note.trim()
-        if (typeof body.text === 'string') item.text = body.text.trim()
+        if (typeof body.note === 'string' && item.kind === 'trait') item.note = cleanText(body.note, 300)
+        if (typeof body.text === 'string') item.text = cleanText(body.text, 800)
         if (typeof body.hard === 'boolean') item.hard = body.hard
-        if (typeof body.date === 'string') item.date = body.date.trim()
+        if (typeof body.date === 'string') item.date = cleanText(body.date, 40)
         if (before !== JSON.stringify(item)) {
           item.hist = [...(item.hist || []), { at: stamp(), what: '手动改过' }].slice(-8)
           audit(db, { op, dir, id: body.id })
@@ -1500,8 +1512,8 @@ function applyOps(db, body) {
       store.event.unshift({
         id: nextId(db, 'e'),
         kind: ['feeling', 'precious', 'work'].includes(body.kind) ? body.kind : 'promise',
-        text: String(body.text || '').trim(),
-        date: String(body.date || '').trim(),
+        text: cleanText(body.text, 600),
+        date: cleanText(body.date, 40),
         status: 'open',
         ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [],
         hist: [{ at: stamp(), what: '记下了' }],
@@ -1511,17 +1523,17 @@ function applyOps(db, body) {
     }
     case 'addUser': {
       if (!store) break
-      store.user.unshift({ id: nextId(db, 'u'), text: String(body.text || '').trim(), ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [] })
+      store.user.unshift({ id: nextId(db, 'u'), text: cleanText(body.text, 600), ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [] })
       audit(db, { op, dir, text: body.text })
       break
     }
     case 'addOther': {
       if (!store) break
-      const name = String(body.name || '').trim().slice(0, 40)
+      const name = cleanText(body.name, 40)
       if (!name) break
       const other = ensureOther(store, name)
       if (body.alias) {
-        const alias = String(body.alias).trim().slice(0, 40)
+        const alias = cleanText(body.alias, 40)
         if (alias && !other.aliases.includes(alias)) other.aliases.push(alias)
       }
       audit(db, { op, dir, name, id: other.id })
@@ -1530,7 +1542,7 @@ function applyOps(db, body) {
     case 'renameOther': {
       if (!store || !body.id) break
       const other = othersOf(store).find((o) => o.id === body.id)
-      const name = String(body.name || '').trim().slice(0, 40)
+      const name = cleanText(body.name, 40)
       if (!other || !name) break
       // The old name stays searchable: people change nicknames mid-conversation.
       if (other.name && other.name !== name && !other.aliases.includes(other.name)) other.aliases.push(other.name)
@@ -1568,8 +1580,8 @@ function applyOps(db, body) {
       other.event.unshift({
         id: nextId(db, 'e'),
         kind: ['feeling', 'precious', 'work'].includes(body.kind) ? body.kind : 'promise',
-        text: String(body.text || '').trim(),
-        date: String(body.date || '').trim(),
+        text: cleanText(body.text, 600),
+        date: cleanText(body.date, 40),
         status: 'open',
         ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [],
         hist: [{ at: stamp(), what: '记下了' }],

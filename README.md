@@ -112,9 +112,10 @@
 
 | 方式 | 怎么做 | 升级 |
 |---|---|---|
-| 插件市场 | DSH 里打开市场，搜 `persona panel` | 市场里重装（或等更新提示） |
-| 源码 | `dsh plugin add https://github.com/mihomooo/dsh-persona-panel` | 卸载后重装 |
-| npm（可选） | `dsh plugin add dsh-persona-panel` | 卸载后重装 |
+| 源码（现在就能用） | `dsh plugin add https://github.com/mihomooo/dsh-persona-panel` | 卸载后重装 |
+| Release 压缩包 | 从 [Releases](https://github.com/mihomooo/dsh-persona-panel/releases) 下 `.tgz` 直接装 | 卸载后重装 |
+| 插件市场 | 已提交收录，合并后可在市场里搜 `persona panel` | 市场里重装 |
+| npm | **尚未发布**（账号在解冻中），现在别用这条 | — |
 
 零依赖，没有构建脚本，装上去就是一个目录，不需要编译。
 
