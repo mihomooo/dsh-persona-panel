@@ -11,7 +11,9 @@ const owner = 'mihomooo'
 const repo = 'dsh-persona-panel'
 const tag = process.argv[2] || 'v0.4.6'
 const name = process.argv[3] || `${tag.slice(1)} — 记忆按挡位读取`
-const notesPath = 'C:/Users/YTYisJWYdaddy/Desktop/ds/persona-plugin/docs/market/release-notes-0.4.6.md'
+const version = tag.replace(/^v/, '')
+const notesPath =
+  process.argv[4] || `C:/Users/YTYisJWYdaddy/Desktop/ds/persona-plugin/docs/market/release-notes-${version}.md`
 const assetPath = 'C:/Users/YTYisJWYdaddy/Desktop/ds/persona-plugin/dsh-persona-panel.tgz'
 const assetName = 'dsh-persona-panel.tgz'
 const api = 'https://api.github.com'
