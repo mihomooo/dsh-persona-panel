@@ -670,7 +670,7 @@ function renderPrompt(db, dir, opts = {}) {
     const digest = fitDiary(start.picked, room)
     const left = start.total - digest.lines.length
     parts.push(
-      `### 我写下的字\n${digest.lines.join('\n')}\n${left > 0 ? `（日记共 ${start.total} 条，这一节放不下，只从最近往前放了 ${digest.lines.length} 条；更早的用 persona_recall 看，它从最早的开始列。）` : '（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次。）'}`,
+      `### 我写下的字\n${digest.lines.join('\n')}\n${left > 0 ? `（日记共 ${start.total} 条，这一节放不下，只从最近往前放了 ${digest.lines.length} 条；更早的先 persona_recall depth="index" 扫目录，再挑一段看。）` : '（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次。）'}`,
     )
   }
   const pending = db.pendingImport
@@ -744,12 +744,29 @@ function renderRecall(db, dir, opts = {}) {
       return ta - tb
     })
     const depth = opts.depth || (ordered.length > 60 ? 'medium' : 'all')
-    const picked = diarySlice(ordered, depth)
-    const label = depth === 'all' ? '全部' : depth === 'shallow' ? '最近四分之一' : depth === 'medium' ? '中间四分之一' : '较早四分之一'
-    out.push(`### 我写下的字（${picked.length}/${diary.length} 条 · ${label} · 只读）`)
-    for (const d of picked) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
-    if (picked.length < ordered.length) {
-      out.push(`（还有 ${ordered.length - picked.length} 条没列出来：换 depth 看别的段，要全部就用 depth="all"。）`)
+    if (depth === 'index') {
+      // A table of contents, not a chapter: months with their counts and the
+      // opening of each entry, so the next call can aim instead of guess.
+      out.push(`### 我写下的字（目录 · ${ordered.length} 条 · 只读）`)
+      const months = new Map()
+      for (const d of ordered) {
+        const key = (d.date || '').slice(0, 7) || '未标日期'
+        if (!months.has(key)) months.set(key, [])
+        months.get(key).push(d)
+      }
+      for (const [key, list] of months) {
+        const heads = list.slice(0, 4).map((d) => `${d.text.slice(0, 12)}${d.text.length > 12 ? '…' : ''}`).join(' / ')
+        out.push(`- ${key}（${list.length} 条）${heads}${list.length > 4 ? ` …还有 ${list.length - 4} 条` : ''}`)
+      }
+      out.push('（先看这一页，再按日期挑：depth="deep" 看较早那四分之一，shallow 看最近的。）')
+    } else {
+      const picked = diarySlice(ordered, depth)
+      const label = depth === 'all' ? '全部' : depth === 'shallow' ? '最近四分之一' : depth === 'medium' ? '中间四分之一' : '较早四分之一'
+      out.push(`### 我写下的字（${picked.length}/${diary.length} 条 · ${label} · 只读）`)
+      for (const d of picked) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
+      if (picked.length < ordered.length) {
+        out.push(`（还有 ${ordered.length - picked.length} 条没列出来：先 depth="index" 扫目录，或换 depth 看别的段，要全部就用 depth="all"。）`)
+      }
     }
   }
   for (const o of store.others || []) {
@@ -1972,9 +1989,9 @@ export function apply(ctx, config = {}) {
           who: { type: 'string', description: 'Optional: read only this other person\'s branch (the name used in the group chat).' },
           depth: {
             type: 'string',
-            enum: ['shallow', 'medium', 'deep', 'all'],
+            enum: ['index', 'shallow', 'medium', 'deep', 'all'],
             description:
-              'How far back to read the diary, oldest-third style: shallow = the newest quarter, medium = the middle, deep = the earlier quarter, all = every line. Use shallow when something from lately is missing, deep when reconstructing an older stretch. Other sections always come whole.',
+              'How far back to read the diary. "index" returns a table of contents (one line per month). "shallow" = the newest quarter, "medium" = the middle, "deep" = the earlier quarter, "all" = every line. Start with index when you only know roughly when something happened; other sections always come whole.',
           },
         },
         [],
