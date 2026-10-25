@@ -91,6 +91,13 @@ ok('prompt has diary block', text.includes('我写下的字'))
 ok('prompt carries the line', text.includes('跟着松了一口气'))
 ok('prompt marks it read-only', text.includes('只读'))
 
+// One read per session: the second turn of the same conversation must not pay
+// for the diary again, and recall is where it can be re-opened.
+const again = section.text({ agent: exec.agent })
+ok('diary read once per session', !again.includes('我写下的字'))
+const recalled = (await tools.persona_recall.execute({}, exec)).text
+ok('recall can still read the diary', recalled.includes('跟着松了一口气') && /只读/.test(recalled))
+
 await post({ op: 'settings', settings: { feature: { key: 'diary', on: false } } })
 const off = await snap()
 const offText = section.text({ agent: exec.agent })

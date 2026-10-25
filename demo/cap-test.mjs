@@ -90,9 +90,14 @@ await post({ op: 'markEvent', id: askedId, important: true })
 s = await snap()
 ok('star toggled', s.store.event.filter((e) => e.important).length === 2)
 
+// Events no longer ride in the standing prompt: it carries only what is about to
+// come due. The full drawer is the read side, and that must be complete.
 const text = section.text({ agent: exec.agent })
-ok('star in prompt', text.includes('★ 第五件事'))
-ok('starred first', text.indexOf('★ 第五件事') < text.indexOf('第一件事') < 0 || text.indexOf('★ 第五件事') < text.indexOf('- 第一件事'))
+ok('prompt no longer lists events', !text.includes('第五件事'))
+const recalled = (await tools.persona_recall.execute({}, exec)).text
+ok('recall has the starred event', recalled.includes('★ 第五件事'))
+ok('recall lists every event', ['第一件事', '第四件事', '第五件事'].every((t) => recalled.includes(t)))
+ok('recall stars come first', recalled.indexOf('★ 第五件事') < recalled.indexOf('第一件事'))
 
 await post({ op: 'raiseCap', value: 0 })
 s = await snap()
@@ -100,3 +105,13 @@ ok('unlimited accepted', s.settings.eventsCap === 0)
 const last = await remember({ kind: 'event', text: '第六件事：不限之后随便写' })
 s = await snap()
 ok('unlimited writes through', s.store.event.length === 6 && /记下/.test(last.text))
+
+// The one thing that still rides in the standing prompt: an event about to come
+// due. Everything else waits for recall.
+const soon = new Date()
+soon.setDate(soon.getDate() + 1)
+const dd = `${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`
+await remember({ kind: 'event', text: '明天要交的东西', date: dd })
+const dueText = section.text({ agent: exec.agent })
+ok('due event shows in prompt', dueText.includes('快到日子的事') && dueText.includes('明天要交的东西'))
+ok('far events do not', !dueText.includes('第六件事'))

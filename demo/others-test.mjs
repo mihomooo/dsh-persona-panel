@@ -78,7 +78,7 @@ const snap = await call('GET', null, {})
 const person = (snap.body.store.others || [])[0]
 say('stored under person', `${person.name}=${person.user.map((u) => u.text).join('/')}`)
 
-const textOn = String(section.text({}))
+const textOn = String(section.text({ agent: exec.agent }))
 say('prompt has others section', textOn.includes('同一屋檐下的其他人') && textOn.includes('小缘'))
 
 const event = await remember.execute({ kind: 'event', text: '约好下周一起打某个副本', date: '10-30', who: '小缘' }, exec)
@@ -88,7 +88,7 @@ const afterEvent = await call('GET', null, {})
 say('person impressions', afterEvent.body.store.others[0].user.map((u) => u.text).join('/'))
 
 await post({ op: 'settings', settings: { feature: { key: 'others', on: false, rec: false } } })
-const textOff = String(section.text({}))
+const textOff = String(section.text({ agent: exec.agent }))
 say('prompt folds them away', !textOff.includes('同一屋檐下的其他人'))
 
 const backOff = await remember.execute({ kind: 'user', text: '不该写进去', who: '小缘' }, exec)

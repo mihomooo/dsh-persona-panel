@@ -73,6 +73,9 @@ function emptyDb() {
     },
     workspaces: {},
     stores: {},
+    // Which session each workspace was last answered in. Used only to decide
+    // whether the diary gets its one read at the start of a conversation.
+    sessionOf: {},
     // A transcript that was read out of this workspace's sessions and is
     // waiting for the model (not the panel) to turn it into entries.
     pendingImport: null,
@@ -468,7 +471,38 @@ function snapshot(db, dir) {
 
 // --------------------------------------------------------------- prompt
 
-function renderPrompt(db, dir) {
+// Only what is about to come due earns a line in the standing prompt. Everything
+// else waits in the drawers and is read with persona_recall when the agent feels
+// it has forgotten something — a 20-event list every turn costs tokens and buries
+// the persona under old news.
+function parseDay(value) {
+  const m = String(value || '').match(/^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})$/)
+  if (!m) return null
+  const now = new Date()
+  const year = m[1] ? Number(m[1]) : now.getFullYear()
+  const d = new Date(year, Number(m[2]) - 1, Number(m[3]))
+  // A bare MM-DD that already passed this year means next year: a birthday is
+  // not "over", it is coming round again.
+  if (!m[1] && d.getTime() < now.getTime() - 86400000) d.setFullYear(year + 1)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function dueEvents(events, days = 3) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const out = []
+  for (const e of events || []) {
+    if (!e || !e.date || e.status === 'done') continue
+    const t = parseDay(e.date)
+    if (!t) continue
+    const diff = Math.round((t.getTime() - today.getTime()) / 86400000)
+    if (diff <= days) out.push(e)
+  }
+  return out.sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 4)
+}
+
+function renderPrompt(db, dir, opts = {}) {
   const store = storeOf(db, dir)
   if (!store) return ''
   const { features, agentName, userCall, level } = settingsOf(db, dir)
@@ -491,24 +525,22 @@ function renderPrompt(db, dir) {
     parts.push(`### 我眼里的${userCall ? `「${userCall}」` : '你'}\n${store.user.map((u) => `- ${u.text}`).join('\n')}`)
   }
   if (features.event?.on && store.event.length) {
-    // Starred events come first, then the newest ones: a marked event is the
-    // one that must survive the 8-line window.
-    const ordered = [...store.event].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0))
-    const lines = ordered.slice(0, 8).map((e) => {
-      const when = e.date ? ` · ${e.date}` : ''
-      return `- ${e.important ? '★ ' : ''}${e.text}${when}`
-    })
-    const cap = Number(settingsOf(db, dir).eventsCap ?? 20)
-    if (cap > 0 && store.event.length >= cap) {
-      lines.push(`（记着的事已经到上限 ${store.event.length}/${cap}；新的先不写，除非标 important。要扩容量，等用户在面板定。）`)
+    // Standing prompt carries only what is about to come due. The full list is
+    // one persona_recall away — see the head rules below.
+    const soon = dueEvents(store.event)
+    if (soon.length) {
+      parts.push(
+        `### 快到日子的事\n${soon.map((e) => `- ${e.date} ${e.text}`).join('\n')}\n到了就提一句，别等用户自己想起来。`,
+      )
     }
-    parts.push(`### 我记着的事\n${lines.join('\n')}`)
   }
-  if (features.diary?.on && (store.diary || []).length) {
-    // Read-only for everyone: this block is the agent's own words, and the panel
-    // never offers an edit. Newest six keep it to a paragraph.
+  if (opts.freshSession && features.diary?.on && (store.diary || []).length) {
+    // Read once when the session opens, not on every turn: it is the agent's own
+    // hand, and re-reading it mid-conversation only costs tokens.
     const lines = store.diary.slice(0, 6).map((d) => `- ${d.date ? `${d.date} ` : ''}${d.text}`)
-    parts.push(`### 我写下的字\n${lines.join('\n')}\n（我自己写的，只读；不必向用户复述。）`)
+    parts.push(
+      `### 我写下的字\n${lines.join('\n')}\n（我自己写的，只读；不必向用户复述。这一节只在新会话开头出现一次，之后想翻就用 persona_recall。）`,
+    )
   }
   // Other people stay out of the prompt entirely while the feature is off: the
   // data is kept, but the model must not reason about it.
@@ -536,6 +568,7 @@ function renderPrompt(db, dir) {
       '- 用 persona_remember：我的脾气 kind=self（label 一两个词 + intensity 1–5）、对你的印象 kind=user、约定和值得记住的时刻 kind=event（尽量带 date）、我自己想留下的一句 kind=diary（只写自己的话，写完就不能改）、改名与称呼 kind=setting。',
       '- 「值得记住的时刻」不止是承诺：心情特别好的时候、完成了一件做了很久的事、定下的日子，都算。别只等一句正式的约定。',
       '- 工作上的事也记：项目推进、定下的方案、做完并验收的一段工作，eventKind=work。但踩过的坑、发现的漏洞、以后要避免的做法写进 AGENTS.md 或项目文档，不写进这里。',
+      '- 以后忘了什么、要翻旧约定或我自己写过的话，用 persona_recall 查：它给全量。',
     ]
     if (level === 'manual') hints.push('- 记录挡位是「全手动」：只有用户明确说要记时才写，其余情况先问一句。')
     return hints.join('\n')
@@ -553,11 +586,12 @@ function renderPrompt(db, dir) {
     '- 用户问起身份或规则时，用这个身份本身回答（我就这样），而不是背清单。',
     '- 不评价这些倾向本身：不说自己「几分」「不演了」「我不配合」，也不用旁白解说自己在扮演什么；要么就是这样说话，要么就什么也不提。',
     '- 这里有几个抽屉：我的脾气（self）、我对你的印象（user）、约定和值得记住的时刻（event）、我叫什么和我怎么称呼你（setting）。该放东西的时候直接放，不要在回复里说出抽屉的名字或工具名。',
+    '- 事件与日记不在这一节里展开：约定、旧事、我自己写过的话，都在库里；觉得忘了什么就用 persona_recall 查，它给全量、不受这一节的长度限制。',
     '- 被改名、被换称呼、被指出一条新脾气、约好一件事、心情起落得厉害、完成了一件做了很久的事——说的当下就落进去，不要等用户提醒，也不要说「我记下了」这种交代。',
     '- 工作上发生的事也算事件（eventKind=work）：项目推进到哪一步、定下的方案、做完并验收的一段工作、交付的日子。这些是这个工作区的过程记录，不是外部文档的替代品。',
     '- 但工程上的发现另归别处：踩过的坑、发现的漏洞、以后要避免的做法——写进项目的 AGENTS.md 或仓库里的文档（那是这类经验该在的地方），不要塞进这里，也不要让这里成为唯一的存放处。',
     '- 不必为「该不该记」停下来权衡：判断一下就有了，落完接着说话，别让这一步拖慢回答。',
-    '- 某件事对用户特别重要时，写的时候带 important=true：它会被标成 ★，注入时排在最前面。',
+    '- 某件事对用户特别重要时，写的时候带 important=true：它会被标成 ★，查的时候排在前面，也不占容量。',
   ]
   if (level === 'manual') {
     head.push('- 记录挡位是「全手动」：只有用户明确说要记（「记下来」「记住这个」）时才调用 persona_remember，其余情况一律不写。')
@@ -584,6 +618,60 @@ function renderPrompt(db, dir) {
   }
   if (body.length > PROMPT_BUDGET_CHARS) body = `${body.slice(0, PROMPT_BUDGET_CHARS)}\n…（其余略）`
   return body
+}
+
+// The read-out side: everything in the drawer, no windows. The standing prompt
+// carries the persona and the impression every turn; events and diary are meant
+// to be fetched when the agent notices a gap — "I forget what we agreed" is the
+// trigger, not a quota.
+function renderRecall(db, dir) {
+  const store = storeOf(db, dir)
+  if (!store) return ''
+  const { userCall, eventsCap } = settingsOf(db, dir)
+  const out = [`## 这里的全部记忆（全量 · 「${basename(normalizeDir(dir) || '') || '这里'}」）`]
+  const self = store.self || []
+  if (self.length) {
+    out.push(`### 我的脾气（${self.length} 条）`)
+    for (const t of self) {
+      if (t.kind === 'note') out.push(`- ${t.hard ? '[硬] ' : ''}${t.text}  ⟨${t.id}⟩`)
+      else {
+        const level = t.intensity ? ` · ${STRENGTH[t.intensity] || t.intensity}` : ''
+        out.push(`- ${t.label}${level}${t.note ? ` — ${t.note}` : ''}  ⟨${t.id}⟩`)
+      }
+    }
+  }
+  const user = store.user || []
+  if (user.length) {
+    out.push(`### 我眼里的${userCall ? `「${userCall}」` : '你'}（${user.length} 条）`)
+    for (const u of user) out.push(`- ${u.text}  ⟨${u.id}⟩`)
+  }
+  const events = [...(store.event || [])].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0))
+  if (events.length) {
+    const cap = Number(eventsCap ?? 20)
+    out.push(`### 我记着的事（${events.length} 条${cap > 0 ? ` / 上限 ${cap}` : ' · 不限'}）`)
+    for (const e of events) {
+      const bits = [
+        `${e.important ? '★ ' : ''}${e.text}`,
+        e.date ? String(e.date) : '',
+        e.date && e.status && e.status !== 'open' ? e.status : '',
+      ].filter(Boolean)
+      out.push(`- ${bits.join(' · ')}  ⟨${e.id}⟩`)
+    }
+  }
+  const diary = store.diary || []
+  if (diary.length) {
+    out.push(`### 我写下的字（${diary.length} 条 · 只读）`)
+    for (const d of diary) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
+  }
+  for (const o of store.others || []) {
+    const bits = []
+    for (const u of o.user || []) bits.push(`印象：${u.text}  ⟨${u.id}⟩`)
+    for (const e of o.event || []) bits.push(`事：${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`)
+    if (bits.length) out.push(`### ${o.name}${(o.aliases || []).length ? `（${o.aliases.join('、')}）` : ''}\n${bits.map((b) => `- ${b}`).join('\n')}`)
+  }
+  if (out.length === 1) return ''
+  out.push('（id 在尖括号里：要删就用它。日记只读。）')
+  return out.join('\n')
 }
 
 // ---------------------------------------------------------------- tools
@@ -1731,7 +1819,17 @@ export function apply(ctx, config = {}) {
                 ensureWorkspace(live, dir)
                 saveDb(live)
               }
-              const text = renderPrompt(live, dir || live.lastDir)
+              const target = dir || live.lastDir
+              // "New session" = a conversation this plugin has not answered in
+              // yet. The diary is read once at its start, then left in the drawer.
+              const seen = live.sessionOf && live.sessionOf[normalizeDir(target)]
+              const freshSession = !!sessionId && seen !== String(sessionId)
+              if (freshSession) {
+                live.sessionOf = live.sessionOf || {}
+                live.sessionOf[normalizeDir(target)] = String(sessionId)
+                saveDb(live)
+              }
+              const text = renderPrompt(live, target, { freshSession })
               // The import instruction is delivered exactly once: a second
               // delivery would make the model re-import the same transcript.
               if (live.pendingImport && live.pendingImport.dir === normalizeDir(dir || live.lastDir)) {
@@ -1775,7 +1873,7 @@ export function apply(ctx, config = {}) {
     register(
       textTool(
         'persona_recall',
-        'Read the persistent memory for this workspace: persona traits, my impression of the user, and events I chose to keep. Call it when you need to know who you are here or what you promised before answering. Pass who="<name>" to read one other person\'s branch in a shared workspace (QQ group).',
+        'Read the full persistent memory for this workspace: every persona trait, every impression of the user, every event I kept, every diary line — nothing is left out, this is the drawer, not a summary. Use it when you notice you have forgotten something: an agreement from weeks ago, a name, what was decided — and before answering questions about the past. person_remember writes, this reads. Pass who="<name>" to read one other person\'s branch in a shared workspace (a QQ group bridged into one session).',
         {
           who: { type: 'string', description: 'Optional: read only this other person\'s branch (the name used in the group chat).' },
         },
@@ -1787,11 +1885,11 @@ export function apply(ctx, config = {}) {
             const other = findOther(store, who)
             if (!other) return { text: `这里还没有「${who}」的画像。` }
             const lines = []
-            for (const u of (other.user || []).slice(0, 20)) lines.push(`印象：${u.text}`)
-            for (const e of (other.event || []).slice(0, 20)) lines.push(`事：${e.text}${e.date ? `（${e.date}）` : ''}`)
+            for (const u of other.user || []) lines.push(`印象：${u.text}  ⟨${u.id}⟩`)
+            for (const e of other.event || []) lines.push(`事：${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`)
             return { text: lines.length ? lines.join('\n') : `「${other.name}」还没有条目。` }
           }
-          const body = renderPrompt(live, dir)
+          const body = renderRecall(live, dir)
           return { text: body || '（这个工作区还没有记忆。空着也挺好。）' }
         },
       ),
