@@ -73,9 +73,9 @@ function emptyDb() {
     },
     workspaces: {},
     stores: {},
-    // Which session each workspace was last answered in. Used only to decide
-    // whether the diary gets its one read at the start of a conversation.
-    sessionOf: {},
+    // Which sessions have already opened here. The diary is read on the first
+    // turn of each session and never again, so this only has to remember ids.
+    sessions: {},
     // A transcript that was read out of this workspace's sessions and is
     // waiting for the model (not the panel) to turn it into entries.
     pendingImport: null,
@@ -85,6 +85,15 @@ function emptyDb() {
 
 let dbCache = null
 let dbRoot = ''
+
+// The id list only feeds "has this session opened yet", so it can be trimmed
+// without losing anything the user can see.
+const MAX_SEEN_SESSIONS = 400
+function pruneSessions(db) {
+  const keys = Object.keys(db.sessions || {})
+  if (keys.length <= MAX_SEEN_SESSIONS) return
+  for (const k of keys.slice(0, keys.length - MAX_SEEN_SESSIONS)) delete db.sessions[k]
+}
 
 function loadDb() {
   const root = dataRoot()
@@ -534,14 +543,6 @@ function renderPrompt(db, dir, opts = {}) {
       )
     }
   }
-  if (opts.freshSession && features.diary?.on && (store.diary || []).length) {
-    // Read once when the session opens, not on every turn: it is the agent's own
-    // hand, and re-reading it mid-conversation only costs tokens.
-    const lines = store.diary.slice(0, 6).map((d) => `- ${d.date ? `${d.date} ` : ''}${d.text}`)
-    parts.push(
-      `### 我写下的字\n${lines.join('\n')}\n（我自己写的，只读；不必向用户复述。这一节只在新会话开头出现一次，之后想翻就用 persona_recall。）`,
-    )
-  }
   // Other people stay out of the prompt entirely while the feature is off: the
   // data is kept, but the model must not reason about it.
   if (features.others?.on && (store.others || []).length) {
@@ -555,6 +556,16 @@ function renderPrompt(db, dir, opts = {}) {
     if (rows.length) {
       parts.push(`### 同一屋檐下的其他人\n${rows.join('\n')}\n这些是别人的事，不是${userCall ? `「${userCall}」` : '你'}的；提到时带上名字。`)
     }
+  }
+  if (opts.freshSession && features.diary?.on && (store.diary || []).length) {
+    // The whole diary, once, at the top of a session: it is the agent's own hand,
+    // and a conversation should start remembering all of it. Later turns fall
+    // back to persona_recall like events do. Placed last so that if the budget
+    // ever bites, it bites the tail of the diary rather than the persona.
+    const lines = store.diary.map((d) => `- ${d.date ? `${d.date} ` : ''}${d.text}`)
+    parts.push(
+      `### 我写下的字\n${lines.join('\n')}\n（我自己写的，只读；不必向用户复述。这一节只在这一场会话开头出现一次，之后想翻就用 persona_recall。）`,
+    )
   }
   // An empty workspace still needs the how-to, not just "this is empty": the
   // model only learns the drawers exist, and what counts as an event, if we say
@@ -1820,14 +1831,19 @@ export function apply(ctx, config = {}) {
                 saveDb(live)
               }
               const target = dir || live.lastDir
-              // "New session" = a conversation this plugin has not answered in
-              // yet. The diary is read once at its start, then left in the drawer.
-              const seen = live.sessionOf && live.sessionOf[normalizeDir(target)]
-              const freshSession = !!sessionId && seen !== String(sessionId)
-              if (freshSession) {
-                live.sessionOf = live.sessionOf || {}
-                live.sessionOf[normalizeDir(target)] = String(sessionId)
-                saveDb(live)
+              // "New session" is tracked per session id, not per workspace: one
+              // workspace holds several conversations, and flipping between them
+              // must not look like a fresh start every time.
+              const sid = sessionId ? String(sessionId) : ''
+              let freshSession = false
+              if (sid) {
+                live.sessions = live.sessions || {}
+                if (!live.sessions[sid]) {
+                  freshSession = true
+                  live.sessions[sid] = Date.now()
+                  pruneSessions(live)
+                  saveDb(live)
+                }
               }
               const text = renderPrompt(live, target, { freshSession })
               // The import instruction is delivered exactly once: a second

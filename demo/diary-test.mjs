@@ -95,6 +95,18 @@ ok('prompt marks it read-only', text.includes('只读'))
 // for the diary again, and recall is where it can be re-opened.
 const again = section.text({ agent: exec.agent })
 ok('diary read once per session', !again.includes('我写下的字'))
+
+// Two conversations in one workspace: each gets its own read, and switching back
+// must not count as opening a new one again.
+const second = { agent: { id: 'session-2', session: { header: { cwd: dir } } } }
+ok('another session reads it again', section.text({ agent: second.agent }).includes('我写下的字'))
+ok('switching back does not re-read', !section.text({ agent: exec.agent }).includes('我写下的字'))
+ok('a second visit to session-2 does not either', !section.text({ agent: second.agent }).includes('我写下的字'))
+
+// "All of it", not the newest few: both entries have to be there.
+const full = section.text({ agent: { id: 'session-3', session: { header: { cwd: dir } } } })
+ok('diary is read in full', full.includes('跟着松了一口气') && full.includes('字'.repeat(40)) && !full.includes('…（其余略）'))
+
 const recalled = (await tools.persona_recall.execute({}, exec)).text
 ok('recall can still read the diary', recalled.includes('跟着松了一口气') && /只读/.test(recalled))
 
