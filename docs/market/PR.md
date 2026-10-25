@@ -2,14 +2,14 @@
 
 前置：仓库创建满 1 天 → 最早 `2026-10-26 15:23 +08` 之后提交。
 
-## 步骤 0：先把 0.4.8 发出去
+## 步骤 0：先把 0.4.9 发出去
 
 市场条目里的 `tarball` 是 `releases/latest/download/dsh-persona-panel.tgz`，现在这个地址还指向 0.4.7。
-提 PR 之前先建 [Release v0.4.8](https://github.com/mihomooo/dsh-persona-panel/releases/new?tag=v0.4.8)：
+提 PR 之前先建 [Release v0.4.9](https://github.com/mihomooo/dsh-persona-panel/releases/new?tag=v0.4.9)：
 
-- 正文：`docs/market/release-notes-0.4.8.md`
-- 附件：仓库根目录的 `dsh-persona-panel.tgz`（0.4.8，已校验）
-- 建完验一下：`releases/latest/download/dsh-persona-panel.tgz` 下载下来的 `package.json` 是 `"version": "0.4.8"`
+- 正文：`docs/market/release-body-v0.4.9.md`（0.4.8 + 0.4.9 合并说明，0.4.8 没单独发过）
+- 附件：仓库根目录的 `dsh-persona-panel.tgz`（**文件名不带版本号**，0.4.9 内容，已校验）
+- 建完验一下：`releases/latest/download/dsh-persona-panel.tgz` 下载下来解包，`package.json` 里是 `"version": "0.4.9"`
 
 ## 要提交的文件
 
