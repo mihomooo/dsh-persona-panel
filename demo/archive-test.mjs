@@ -63,6 +63,7 @@ s = await snap()
 ok('archive empties the lists', s.store.self.length === 0 && s.store.user.length === 0 && s.store.event.length === 0)
 ok('archive leaves one orphan', s.orphans.length === 1, s.orphans.length)
 ok('orphan keeps the count', s.orphans[0].n === 3, s.orphans[0].n)
+ok('orphan remembers its workspace', s.orphans[0].dir === dirA, s.orphans[0].dir)
 const orphanId = s.orphans[0].id
 
 // Written after the archive: restoring must keep it.
@@ -89,6 +90,12 @@ ok('second restore is a no-op', s.store.self.filter((x) => x.kind === 'note').le
 const client = (await import('node:fs')).readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 ok('client sends restoreArchive', client.includes("op: 'restoreArchive'"))
 ok('client labels it 找回', client.includes('找回'))
+// Discovery: an archived workspace must advertise itself where the user is,
+// not only inside a settings modal they have no reason to open.
+ok('client banner explains the archive', client.includes('被${o.type === \'archive\' ? \'归档\' : \'摘出\'}了'))
+ok('client banner filters by workspace', client.includes('o.dir === data.dir'))
+ok('settings names the path', client.includes('设置 → 无主记忆 → 找回…'))
+ok('archive confirm names the path', client.includes('无主记忆 → 找回…'))
 
 const bad = results.filter(([, pass]) => !pass).length
 console.log(`${results.length - bad}/${results.length} archive checks passed`)

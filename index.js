@@ -484,7 +484,7 @@ function snapshot(db, dir) {
         },
       }))
       .sort((a, b) => b.lastSeen - a.lastSeen),
-    orphans: db.orphans.map((o) => ({ id: o.id, from: o.from, type: o.type, n: o.n, at: o.at })),
+    orphans: db.orphans.map((o) => ({ id: o.id, from: o.from, type: o.type, n: o.n, at: o.at, dir: o.dir || '', storeId: o.storeId || '' })),
     pendingImport: db.pendingImport && db.pendingImport.dir === key ? db.pendingImport : null,
     integrityWarn: db.integrityWarn || null,
   }

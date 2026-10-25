@@ -469,6 +469,31 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'pp-mid' },
+            (data.orphans || [])
+              .filter((o) => o.dir === data.dir || (o.storeId && o.storeId === data.storeId))
+              .map((o) =>
+                h(
+                  'div',
+                  { key: o.id, className: 'pp-hint', style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 10, padding: '8px 10px' } },
+                  h(
+                    'span',
+                    { className: 'pp-grow' },
+                    `这个工作区的 ${o.n} 条记忆在 ${o.at} 被${o.type === 'archive' ? '归档' : '摘出'}了。它们还在，只是不参与填写。`,
+                  ),
+                  h(
+                    'button',
+                    {
+                      className: 'pp-btn',
+                      'data-primary': '1',
+                      onClick: async () => {
+                        await send({ op: 'restoreArchive', id: o.id })
+                      },
+                    },
+                    '找回',
+                  ),
+                  h('button', { className: 'pp-btn', onClick: () => setModal({ kind: 'settings' }) }, '去设置'),
+                ),
+              ),
             h(
               'div',
               { className: 'pp-tabs' },
@@ -644,7 +669,7 @@ window.__ModuleLoader__.load({
         modal && modal.kind === 'archive'
           ? h(Confirm, {
               title: `归档「${data.title}」的记忆`,
-              body: `这会收走这里的 ${(data.store.self || []).length + (data.store.user || []).length + (data.store.event || []).length} 条，收进归档，工作区还在。归档里的东西可以在设置里找回，或者永久删掉。`,
+              body: `这会收走这里的 ${(data.store.self || []).length + (data.store.user || []).length + (data.store.event || []).length} 条，收进归档，工作区还在。归档里的东西不会丢：设置 → 无主记忆 → 找回…，或者归档后在这里直接点「找回」。永久删除才是不可逆的。`,
               confirm: `确认归档`,
               onClose: () => setModal(null),
               onOk: async () => {
@@ -959,6 +984,7 @@ window.__ModuleLoader__.load({
                 'div',
                 null,
                 h('div', { className: 'pp-sub' }, `无主记忆（${data.orphans.length}）`),
+                h('div', { className: 'pp-hint' }, '归档或删掉的工作区留下的记忆都在这里。「找回…」会并回当前工作区；「永久删除」不可逆。'),
                 data.orphans.map((o) =>
                   h(
                     'div',

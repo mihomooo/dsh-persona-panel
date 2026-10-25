@@ -84,7 +84,7 @@ const fixture = {
   },
   firstRun: true,
   workspaces: [{ dir: 'C:\\Users\\me\\Desktop\\ds', title: 'ds', lastSeen: 1 }],
-  orphans: [{ id: 'o9', from: '旧工作区', type: 'archive', n: 3, at: '昨天' }],
+  orphans: [{ id: 'o9', from: 'ds', type: 'archive', n: 3, at: '昨天', dir: 'C:\\Users\\me\\Desktop\\ds', storeId: 's1' }],
   pendingImport: null,
   integrityWarn: null,
   token: 'abc',
@@ -156,6 +156,10 @@ for (const [name, def] of renderTargets) {
       ok('panel shows a trait label', text.includes('耐心'), text.slice(0, 120))
       ok('panel shows the hard rule', text.includes('绝不替我做主'))
       ok('star tag exists in the bundle', source.includes('★ 重要'))
+      // Discovery: an archive of this very workspace must surface a way back
+      // without opening settings.
+      ok('archived workspace shows a banner', text.includes('被归档了'), text.slice(0, 200))
+      ok('banner offers 找回', text.includes('找回'))
     }
   } catch (e) {
     ok(`render ${name} clean`, false, e.message)
