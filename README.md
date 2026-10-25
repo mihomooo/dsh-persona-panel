@@ -108,11 +108,17 @@
 
 ## 装
 
-```bash
-dsh plugin install <本目录或 npm 包名>
-```
+| 方式 | 怎么做 | 升级 |
+|---|---|---|
+| 插件市场 | DSH 里打开市场，搜 `persona panel` | 市场里重装（或等更新提示） |
+| 源码 | `dsh plugin add https://github.com/mihomooo/dsh-persona-panel` | 卸载后重装 |
+| npm（可选） | `dsh plugin add dsh-persona-panel` | 卸载后重装 |
 
-或在 DSH 的插件市场里搜 `persona panel`。
+零依赖，没有构建脚本，装上去就是一个目录，不需要编译。
+
+发布到 npm 只影响市场卡片上显示的下载量，**不改变市场从 GitHub 安装**这一点。想跳过源码安装那一步，也可以从 [Releases](https://github.com/mihomooo/dsh-persona-panel/releases) 下载 `.tgz` 直接装。
+
+**升级不丢记忆**：数据在 `~/.dsh/persona-panel/`，卸载只撤程序。
 
 要求 Harness 0.2.x（用到 `webServer.register`、`slots.inject`、`systemPrompt.section`）。
 
