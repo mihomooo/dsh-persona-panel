@@ -86,10 +86,13 @@ await call({ op: 'restoreArchive', id: orphanId })
 s = await snap()
 ok('second restore is a no-op', s.store.self.filter((x) => x.kind === 'note').length === 2, s.store.self.length)
 
-// The button lives in settings, so the client must know the op exists.
+// The banner lives in the panel (the settings list is gone), so the client must
+// know the op exists and must send people to the profile panel, not settings.
 const client = (await import('node:fs')).readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 ok('client sends restoreArchive', client.includes("op: 'restoreArchive'"))
-ok('client labels it 找回', client.includes('找回'))
+ok('client offers the merge back', client.includes('合并回这里'))
+ok('client points at the profile panel', client.includes('打开人格档案'))
+ok('the settings list of orphans is gone', !client.includes('无主记忆'))
 // Discovery: an archived workspace must advertise itself where the user is,
 // not only inside a settings modal they have no reason to open.
 ok('client banner explains the archive', client.includes('被${o.type === \'archive\' ? \'归档\' : \'摘出\'}了'))
