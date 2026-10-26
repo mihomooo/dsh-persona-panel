@@ -501,7 +501,7 @@ window.__ModuleLoader__.load({
                     {
                       className: 'pp-iconbtn',
                       title: '这个提示先收起来（档案还在人格档案里）',
-                      onClick: () => setHideBanner(o.id),
+                      onClick: () => setHideBanner((m) => ({ ...(m || {}), [o.id]: true })),
                     },
                     '×',
                   ),

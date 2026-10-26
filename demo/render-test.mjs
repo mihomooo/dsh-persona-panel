@@ -327,6 +327,17 @@ for (const [name, def] of renderTargets) {
     const refresh = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('刷新'))
     if (refresh) refresh.props.onClick({ stopPropagation() {} })
     nodes = await settle()
+    // The archived banner is a reminder, not a fixture: it shows once, and the
+    // × actually puts it away.
+    ok('an archived workspace gets a banner', textOf(nodes).includes('被归档了'), textOf(nodes).slice(0, 160))
+    const bannerX = findNode(nodes, (n) => n.type === 'button' && String((n.children || []).join('')) === '×' && n.props && n.props.className === 'pp-iconbtn')
+    ok('the banner can be dismissed', !!bannerX)
+    if (bannerX) {
+      bannerX.props.onClick({ stopPropagation() {} })
+      nodes = await settle()
+      ok('dismissing the banner puts it away', !textOf(nodes).includes('被归档了'), textOf(nodes).slice(0, 160))
+    }
+    nodes = await settle()
     const open = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('人格档案'))
     ok('the header offers the profiles panel', !!open)
     if (open) open.props.onClick({ stopPropagation() {} })
