@@ -192,7 +192,7 @@ ok('audit log exists', existsSync(auditPath) && readFileSync(auditPath, 'utf8').
 // (the host side is covered in profile-test; this catches the dialog being
 // simplified back into a one-click overwrite)
 const clientSrc = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-ok('the copy dialog offers to archive first', clientSrc.includes('归档并继续') && clientSrc.includes('直接继续'))
+ok('the copy dialog offers to archive first', clientSrc.includes('先归档再覆盖') && clientSrc.includes('直接覆盖'))
 ok('both modes go through the same confirm', /copyFrom', from, mode, \.\.\.\(archive \? \{ archive \}/.test(clientSrc), 'copyFrom call has no archive path')
 
 const failed = results.filter((x) => !x[1])

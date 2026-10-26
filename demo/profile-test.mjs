@@ -207,6 +207,10 @@ ok('answering no copies without keeping a backup', (await snap(dirB)).profiles.f
 r = await call(dirB, { op: 'copyFrom', from: dirA, mode: 'copy', archive: 'yes' })
 const archivedAfter = (await snap(dirB)).profiles.filter((p) => p.archived).length
 ok('answering yes keeps a backup profile first', archivedAfter === archivedBefore + 1, `${archivedBefore} -> ${archivedAfter}`)
+s = await snap(dirB)
+ok('a copy replaces the persona instead of stacking on it', s.store.self.length === 1 && s.store.self[0].label === '耐心', JSON.stringify(s.store.self).slice(0, 120))
+ok('a copy carries the diary over', s.store.diary.length === 1 && s.store.diary[0].id === 'd1', JSON.stringify(s.store.diary).slice(0, 120))
+ok('a copy empties the target\'s pending cards', (s.store.pending || []).length === 0)
 
 if (exportPath) unlinkSync(exportPath)
 

@@ -292,6 +292,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false)
       const [ask, setAsk] = useState(null)
       const [cand, setCand] = useState([])
+      const [hideBanner, setHideBanner] = useState({})
 
       const apply = useCallback((next) => {
         if (!next || next.error) return
@@ -464,7 +465,8 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'pp-mid' },
             (data.orphans || [])
-              .filter((o) => o.dir === data.dir || (o.storeId && o.storeId === data.storeId))
+              .filter((o) => (o.dir === data.dir || (o.storeId && o.storeId === data.storeId)) && !hideBanner[o.id])
+              .slice(0, 1)
               .map((o) =>
                 h(
                   'div',
@@ -494,8 +496,18 @@ window.__ModuleLoader__.load({
                     },
                     '合并回这里',
                   ),
+                  h(
+                    'button',
+                    {
+                      className: 'pp-iconbtn',
+                      title: '这个提示先收起来（档案还在人格档案里）',
+                      onClick: () => setHideBanner(o.id),
+                    },
+                    '×',
+                  ),
                 ),
-              ),
+              )
+              .filter(Boolean),
             h(
               'div',
               { className: 'pp-tabs' },
@@ -668,9 +680,9 @@ window.__ModuleLoader__.load({
         ),
         modal && modal.kind === 'firstRun' ? h(FirstRun, { data, onDone: async (settings) => { setModal(null); apply(await send({ op: 'firstRun', settings })) } }) : null,
         modal && modal.kind === 'edit' ? h(Editor, { data, modal, onClose: () => setModal(null), send }) : null,
-        modal && modal.kind === 'settings' ? h(Settings, { data, onClose: () => setModal(null), send }) : null,
-        modal && modal.kind === 'profiles' ? h(Profiles, { data, onClose: () => setModal(null), send }) : null,
-        modal && modal.kind === 'copy' ? h(CopyBox, { data, onClose: () => setModal(null), send }) : null,
+        modal && modal.kind === 'settings' ? h(Settings, { data, onClose: () => setModal(null), send, reload: () => load('') }) : null,
+        modal && modal.kind === 'profiles' ? h(Profiles, { data, onClose: () => setModal(null), send, reload: () => load('') }) : null,
+        modal && modal.kind === 'copy' ? h(CopyBox, { data, onClose: () => setModal(null), send, reload: () => load('') }) : null,
         modal && modal.kind === 'archive'
           ? h(Confirm, {
               title: `归档「${data.title}」的记忆`,
@@ -875,7 +887,7 @@ window.__ModuleLoader__.load({
 
     // 人格档案：一份档案是一整套记忆的副本（人设、画像、事件、日记、别人，连同称呼和词库），
     // 不跟着工作区活。活着的工区自己就是一份；归档的、导入的排在同一张表里。
-    function Profiles({ data, onClose, send }) {
+    function Profiles({ data, onClose, send, reload }) {
       // The client bundle can be newer than the host that is already running
       // (the host half is loaded once at boot). Say so instead of showing an
       // empty list that looks like "my memories are gone".
@@ -908,6 +920,7 @@ window.__ModuleLoader__.load({
         setApplyId('')
         setTarget('')
         setMsg(x.archived ? '换好了。原来那份收进「已归档」了。' : '换好了。')
+        if (reload) await reload()
       }
 
       const exportOne = async (p) => {
@@ -1051,7 +1064,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function Settings({ data, onClose, send }) {
+    function Settings({ data, onClose, send, reload }) {
       const s = data.settings
       // The ceiling lives on the workspace store. With no workspace in hand the
       // panel has nowhere to put the number, so the field is shown locked rather
@@ -1186,6 +1199,7 @@ window.__ModuleLoader__.load({
                   },
                 })
                 onClose()
+                if (reload) await reload()
               },
             }, '保存'),
             h('button', { className: 'pp-btn', onClick: onClose }, '关闭'),
@@ -1194,7 +1208,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function CopyBox({ data, onClose, send }) {
+    function CopyBox({ data, onClose, send, reload }) {
       const others = (data.workspaces || []).filter((w) => w.dir !== data.dir)
       const [from, setFrom] = useState(others[0]?.dir || '')
       const [mode, setMode] = useState('copy')
@@ -1205,6 +1219,7 @@ window.__ModuleLoader__.load({
         const x = (body && body.extra) || {}
         if (x.needsArchive) { setAsk(x); return }
         onClose()
+        if (reload) await reload()
       }
       const askLine = (c) => (c ? `脾气 ${c.self}、印象 ${c.user}、事件 ${c.event}、日记 ${c.diary}` : '')
       return h(
@@ -1220,7 +1235,7 @@ window.__ModuleLoader__.load({
                 { className: 'pp-field' },
                 h('label', null, '从哪来'),
                 h('select', { value: from, onChange: (e) => setFrom(e.target.value) }, others.map((w) => h('option', { key: w.dir, value: w.dir }, w.title))),
-                h('div', { className: 'pp-hint', style: { marginTop: 6 } }, '复制是两份，各走各的；共生是一份数据，改一处两处都变。'),
+                h('div', { className: 'pp-hint', style: { marginTop: 6 } }, '两种都会盖掉当前工作区现在的记忆；共生是同一份数据，复制是两份各走各的。'),
                 h(
                   'div',
                   { className: 'pp-two' },
@@ -1228,7 +1243,7 @@ window.__ModuleLoader__.load({
                     'label',
                     { className: 'pp-opt' },
                     h('input', { type: 'radio', name: 'pp-mode', checked: mode === 'copy', onChange: () => setMode('copy') }),
-                    h('span', null, h('div', null, '副本复制'), h('div', { className: 'pp-hint' }, '深拷贝一份，此后互不影响')),
+                    h('span', null, h('div', null, '副本复制'), h('div', { className: 'pp-hint' }, '深拷贝一份盖过来（日记也带），此后互不影响')),
                   ),
                   h(
                     'label',
@@ -1246,15 +1261,15 @@ window.__ModuleLoader__.load({
                   className: 'pp-col',
                   style: { display: 'flex', flexDirection: 'column', gap: 8, padding: 10 },
                 },
-                h('div', null, `「${ask.title || '这个工作区'}」里有 ${askLine(ask.counts)}。先存一份已归档档案再继续？`),
+                h('div', null, `「${ask.title || '这个工作区'}」现在有 ${askLine(ask.counts)}。覆盖之前，要不要先把它们存成一份已归档档案？`),
                 h(
                   'div',
                   { className: 'pp-row' },
-                  h('button', { className: 'pp-btn', 'data-primary': '1', onClick: () => run('yes') }, '归档并继续'),
-                  h('button', { className: 'pp-btn', onClick: () => run('no') }, '直接继续'),
+                  h('button', { className: 'pp-btn', 'data-primary': '1', onClick: () => run('yes') }, '先归档再覆盖'),
+                  h('button', { className: 'pp-btn', onClick: () => run('no') }, '直接覆盖'),
                   h('button', { className: 'pp-btn', onClick: () => setAsk(null) }, '取消'),
                 ),
-                h('div', { className: 'pp-hint' }, '归档的那份留在「人格档案」里，用得着就找回，用不着就删。'),
+                h('div', { className: 'pp-hint' }, '归档的那份留在「人格档案」里，用得着就找回，用不着就删；「直接覆盖」之后这份记忆就真没了。'),
               )
             : null,
           h(

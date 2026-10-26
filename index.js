@@ -2127,13 +2127,13 @@ function applyOps(db, body) {
             audit(db, { op, dir, from: body.from })
           }
         } else {
-          for (const type of ['self', 'user', 'event', 'diary']) {
-            const existing = new Set((store[type] || []).map((x) => x.id))
-            for (const item of src[type] || []) {
-              if (existing.has(item.id)) continue
-              store[type].push(JSON.parse(JSON.stringify(item)))
-            }
+          // A copy is an overwrite, the same way a replace is: take the source
+          // whole (diary included) and drop what the target had. The archived
+          // profile taken above is the only copy of the old persona.
+          for (const type of ['self', 'user', 'event', 'diary', 'others']) {
+            store[type] = (src[type] || []).map((item) => JSON.parse(JSON.stringify(item)))
           }
+          store.pending = []
           audit(db, { op, dir, from: body.from })
         }
       }
