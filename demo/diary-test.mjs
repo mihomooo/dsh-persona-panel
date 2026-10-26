@@ -146,3 +146,13 @@ ok('the window is still the recent side', big.includes('第39条') && !big.inclu
 // walk when something has been forgotten.
 const oldest = (await tools.persona_recall.execute({}, exec)).text
 ok('recall lists the diary from the earliest', oldest.indexOf('两个月前的一句旧话') < oldest.indexOf('跟着松了一口气') && oldest.indexOf('两个月前的一句旧话') < oldest.indexOf('第39条'))
+
+// The first meeting has to ask about the diary too. It records from the very
+// first conversation and can never be edited or deleted afterwards, so a diary
+// nobody was asked about is opt-out-by-accident.
+await post({ op: 'firstRun', settings: { features: ['self', 'user', 'event'] } })
+s = await snap()
+ok('first run can leave the diary off', s.settings.features.diary.on === false)
+await post({ op: 'firstRun', settings: { features: ['self', 'user', 'event', 'diary'] } })
+s = await snap()
+ok('first run keeps it on when checked', s.settings.features.diary.on === true)

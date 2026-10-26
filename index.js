@@ -366,8 +366,15 @@ function capOf(db, dir) {
 function setCap(db, dir, value) {
   const key = normalizeDir(dir)
   const ws = db.workspaces[key]
-  if (!ws) return
   const v = Math.max(0, Math.min(999, Math.floor(Number(value) || 0)))
+  // The panel can be opened with no workspace in hand (the 记忆 entry in the
+  // sidebar is global), and then the request carries dir="". Silently dropping
+  // the number there looks like a save that never happened, so fall back to the
+  // database default that every new store is born with.
+  if (!ws) {
+    db.settings.eventsCap = v
+    return
+  }
   const store = db.stores[ws.storeId]
   if (store) store.cap = v
   for (const w of Object.values(db.workspaces)) {
@@ -1418,7 +1425,10 @@ function applyOps(db, body) {
       if (typeof s.agentName === 'string' && s.agentName.trim()) cfg.agentName = s.agentName.trim()
       if (['manual', 'half', 'active', 'auto'].includes(s.level)) cfg.level = s.level
       if (Array.isArray(s.features)) {
-        for (const key of ['self', 'user', 'event']) {
+        // Diary is asked here too: it records from the very first conversation
+        // and its entries can never be edited or deleted, so leaving it out of
+        // the only first meeting made it opt-out-by-accident.
+        for (const key of ['self', 'user', 'event', 'diary']) {
           const on = s.features.includes(key)
           cfg.features[key] = { on, rec: on }
         }

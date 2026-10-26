@@ -696,7 +696,7 @@ window.__ModuleLoader__.load({
       const [userCall, setUserCall] = useState(data.settings.userCall || '')
       const [agentName, setAgentName] = useState(data.settings.agentName || 'DeepSeek Harness')
       const [level, setLevel] = useState(data.settings.level || 'half')
-      const [picked, setPicked] = useState(['self', 'user', 'event'])
+      const [picked, setPicked] = useState(['self', 'user', 'event', 'diary'])
       const lv = [
         ['manual', '全手动', '只有我说「记」才写'],
         ['half', '半自动', '画像自动 · 承诺问我'],
@@ -740,7 +740,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'pp-row' },
-            ['self', 'user', 'event'].map((k) =>
+            ['self', 'user', 'event', 'diary'].map((k) =>
               h(
                 'label',
                 { key: k, className: 'pp-row', style: { gap: 4 } },
@@ -753,7 +753,7 @@ window.__ModuleLoader__.load({
               ),
             ),
           ),
-          h('div', { className: 'pp-hint' }, '关掉的那个，在这里就不存在：不显示、不注入、也不记。'),
+          h('div', { className: 'pp-hint' }, '关掉的那个，在这里就不存在：不显示、不注入、也不记。日记默认就开着，关掉之后它也就停笔。'),
           h(
             'div',
             { className: 'pp-row', style: { justifyContent: 'flex-end' } },
@@ -865,6 +865,10 @@ window.__ModuleLoader__.load({
 
     function Settings({ data, onClose, send }) {
       const s = data.settings
+      // The ceiling lives on the workspace store. With no workspace in hand the
+      // panel has nowhere to put the number, so the field is shown locked rather
+      // than saved into a default that would not govern any existing workspace.
+      const hasWs = !!data.dir
       const [level, setLevel] = useState(s.level)
       const [lex, setLex] = useState((s.lexicon || []).join(' '))
       const [cap, setCap] = useState(Number.isFinite(s.eventsCap) ? s.eventsCap : 20)
@@ -970,9 +974,12 @@ window.__ModuleLoader__.load({
               min: 0,
               max: 999,
               value: cap,
+              disabled: !hasWs,
               onChange: (e) => setCap(Number(e.target.value)),
             }),
-            h('div', { className: 'pp-hint' }, '0 = 不限。满了的那条会挂成一张卡问你：腾位置，还是就到这里。标了 ★ 的条目不占这个数。'),
+            h('div', { className: 'pp-hint' }, hasWs
+              ? '0 = 不限。满了的那条会挂成一张卡问你：腾位置，还是就到这里。标了 ★ 的条目不占这个数。'
+              : '先打开一个会话再改：这个数属于具体工作区，现在这里没有工作区可写。'),
           ),
           (data.orphans || []).length
             ? h(
@@ -1028,7 +1035,7 @@ window.__ModuleLoader__.load({
                     level,
                     agentName,
                     userCall,
-                    eventsCap: Number.isFinite(Number(cap)) ? Math.max(0, Math.floor(Number(cap))) : 20,
+                    ...(hasWs ? { eventsCap: Number.isFinite(Number(cap)) ? Math.max(0, Math.floor(Number(cap))) : 20 } : {}),
                     lexicon: lex.split(/[\s,，、]+/).filter(Boolean),
                   },
                 })

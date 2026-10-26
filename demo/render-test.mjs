@@ -224,6 +224,41 @@ for (const [name, def] of renderTargets) {
   ok('no one-click irreversible delete', !oneClick.test(source))
 }
 
+// ---- the first meeting must ask about the diary, and the ceiling must not
+// ---- pretend to save when there is no workspace to save it on --------------
+{
+  const panelDef = (slots['settings.section'] || [])[0]
+  const Panel = panelDef && (typeof panelDef.render === 'function' ? panelDef.render : panelDef.component || panelDef.Component)
+  const settle = async () => {
+    for (let pass = 0; pass < 8; pass++) { dirty = false; flatten(createElement(Panel, {}), []) }
+    for (const fn of effects.splice(0)) { try { await fn() } catch {} }
+    await new Promise((r) => setTimeout(r, 30))
+    let nodes = []
+    for (let pass = 0; pass < 10; pass++) { dirty = false; nodes = expand(createElement(Panel, {})) }
+    return nodes
+  }
+  if (typeof Panel === 'function') {
+    fixture.firstRun = false
+    let nodes = await settle()
+    let text = textOf(nodes)
+    ok('first run asks about the drawer set', text.includes('开哪几个'), text.slice(0, 160))
+    ok('first run offers the diary', text.includes('日记'))
+
+    fixture.firstRun = true
+    fixture.dir = ''
+    nodes = await settle()
+    const open = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('设置'))
+    if (open) open.props.onClick({ stopPropagation() {} })
+    nodes = await settle()
+    const num = findNode(nodes, (n) => n.type === 'input' && n.props && n.props.type === 'number')
+    ok('ceiling field locks without a workspace', !!num && num.props.disabled === true)
+    text = textOf(nodes)
+    ok('locked field explains why', text.includes('先打开一个会话再改'), text.slice(-160))
+  } else {
+    ok('first run asks about the diary', false, 'panel missing')
+  }
+}
+
 const failed = results.filter((r) => !r[1])
 console.log(`${results.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length ? 1 : 0)

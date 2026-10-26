@@ -117,3 +117,10 @@ await remember({ kind: 'event', text: '明天要交的东西', date: dd })
 const dueText = section.text({ agent: exec.agent })
 ok('due event shows in prompt', dueText.includes('快到日子的事') && dueText.includes('明天要交的东西'))
 ok('far events do not', !dueText.includes('第六件事'))
+
+// The 记忆 entry in the sidebar opens with no workspace behind it, so the save
+// carries dir="". Dropping the number there looks like a save that never
+// happened: it has to land in the default every new store is born with.
+await call({ dir: '', op: 'settings', settings: { level: 'auto', eventsCap: 7 } }, auth)
+const loose = await call(null, auth)
+ok('cap saved without a workspace', loose.body.settings.eventsCap === 7)
