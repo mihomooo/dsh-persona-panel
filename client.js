@@ -395,6 +395,7 @@ window.__ModuleLoader__.load({
               { className: 'pp-btn', title: '重新读一遍工作区列表（新工作区不用重启）', onClick: () => load(dir) },
               '刷新',
             ),
+            h('button', { className: 'pp-btn', title: '把记忆整份存下来、换掉、导出或导入', onClick: () => setModal({ kind: 'profiles' }) }, '人格档案'),
             h('button', { className: 'pp-btn', onClick: () => setModal({ kind: 'settings' }) }, '设置'),
           ),
         ),
@@ -660,11 +661,12 @@ window.__ModuleLoader__.load({
         modal && modal.kind === 'firstRun' ? h(FirstRun, { data, onDone: async (settings) => { setModal(null); apply(await send({ op: 'firstRun', settings })) } }) : null,
         modal && modal.kind === 'edit' ? h(Editor, { data, modal, onClose: () => setModal(null), send }) : null,
         modal && modal.kind === 'settings' ? h(Settings, { data, onClose: () => setModal(null), send }) : null,
+        modal && modal.kind === 'profiles' ? h(Profiles, { data, onClose: () => setModal(null), send }) : null,
         modal && modal.kind === 'copy' ? h(CopyBox, { data, onClose: () => setModal(null), send }) : null,
         modal && modal.kind === 'archive'
           ? h(Confirm, {
               title: `归档「${data.title}」的记忆`,
-              body: `这会收走这里的 ${(data.store.self || []).length + (data.store.user || []).length + (data.store.event || []).length} 条，收进归档，工作区还在。归档里的东西不会丢：设置 → 无主记忆 → 找回…，或者归档后在这里直接点「找回」。永久删除才是不可逆的。`,
+              body: `这会收走这里的 ${(data.store.self || []).length + (data.store.user || []).length + (data.store.event || []).length} 条，收进归档，工作区还在。归档里的东西不会丢：它会变成一份「已归档」的人格档案，在「人格档案」里能找到、能导出、也能用来替换别的工作区。永久删除才是不可逆的。`,
               confirm: `确认归档`,
               onClose: () => setModal(null),
               onOk: async () => {
@@ -676,7 +678,7 @@ window.__ModuleLoader__.load({
         modal && modal.kind === 'delws'
           ? h(Confirm, {
               title: `删除工作区「${modal.w.title}」`,
-              body: '删的只是工作区，记忆跟着数据走，不跟着工作区走。还有人共用的话它接着用；没人用了就进「无主记忆」，从列表里消失，但不会当场销毁。',
+              body: '删的只是工作区，记忆跟着数据走，不跟着工作区走。还有人共用的话它接着用；没人用了就变成一份「已归档」的人格档案，从工作区的列表里消失，但不会当场销毁。',
               confirm: '删除工作区',
               onClose: () => setModal(null),
               onOk: async () => {
@@ -863,6 +865,148 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // 人格档案：一份档案是一整套记忆的副本（人设、画像、事件、日记、别人，连同称呼和词库），
+    // 不跟着工作区活。活着的工区自己就是一份；归档的、导入的排在同一张表里。
+    function Profiles({ data, onClose, send }) {
+      const list = data.profiles || []
+      const workspaces = data.workspaces || []
+      const [applyId, setApplyId] = useState('')
+      const [target, setTarget] = useState('')
+      const [drop, setDrop] = useState(null)
+      const [msg, setMsg] = useState('')
+      const fileRef = useRef(null)
+
+      const line = (c) => {
+        const parts = [`脾气 ${c.self}`, `印象 ${c.user}`, `事件 ${c.event}`, `日记 ${c.diary}`]
+        if (c.others) parts.push(`别人 ${c.others}`)
+        return parts.join(' · ')
+      }
+
+      const apply = async (id, dir, archive) => {
+        const body = await send({ op: 'applyProfile', id, target: dir, ...(archive ? { archive } : {}) })
+        const x = (body && body.extra) || {}
+        if (x.needsArchive) {
+          setDrop({ id, target: dir, title: x.title, counts: x.counts })
+          return
+        }
+        if (x.error) { setMsg(x.error); return }
+        if (x.same) { setMsg('这就是它自己，换个工作区。'); return }
+        setDrop(null)
+        setApplyId('')
+        setTarget('')
+        setMsg(x.archived ? '换好了。原来那份收进「已归档」了。' : '换好了。')
+      }
+
+      const exportOne = async (p) => {
+        const body = await send({ op: 'exportProfile', id: p.id })
+        const x = (body && body.extra) || {}
+        if (x.error) { setMsg(x.error); return }
+        setMsg(`已导出到桌面：${String(x.path || '').split('\\').pop()}`)
+      }
+
+      const pickFile = async (e) => {
+        const f = e.target.files && e.target.files[0]
+        e.target.value = ''
+        if (!f) return
+        let text = ''
+        try {
+          text = await f.text()
+        } catch (err) {
+          setMsg(String(err.message || err))
+          return
+        }
+        const body = await send({ op: 'importProfile', text, name: f.name.replace(/\.json$/i, '').slice(0, 40) })
+        const x = (body && body.extra) || {}
+        setMsg(x.error ? x.error : `导入了「${x.name || f.name}」。`)
+      }
+
+      return h(
+        'div',
+        { className: 'pp-mask', onClick: onClose },
+        h(
+          'div',
+          { className: 'pp-modal', onClick: (e) => e.stopPropagation() },
+          h('h3', null, '人格档案'),
+          h('div', { className: 'pp-hint', style: { marginTop: -4 } }, '一份档案是一整套记忆的副本：人设、画像、事件、日记、别人，连同称呼和词库。它不跟着工作区活，工作区删了它还在。'),
+          h(
+            'div',
+            { className: 'pp-row', style: { margin: '10px 0 8px' } },
+            h('button', { className: 'pp-btn', onClick: () => fileRef.current && fileRef.current.click() }, '导入档案文件…'),
+            h('input', { type: 'file', accept: '.json,application/json', ref: fileRef, style: { display: 'none' }, onChange: pickFile }),
+            h('span', { className: 'pp-grow pp-hint' }, msg || `共 ${list.length} 份，其中 ${list.filter((p) => p.archived).length} 份已归档`),
+            h('button', { className: 'pp-btn', onClick: onClose }, '关闭'),
+          ),
+          !list.length ? h('div', { className: 'pp-hint' }, '还没有档案。打开过的工作区会自己出现在这里。') : null,
+          list.map((p) =>
+            h(
+              'div',
+              { key: p.id, className: 'pp-item', style: { flexDirection: 'column', alignItems: 'stretch', gap: 5, cursor: 'default', marginBottom: 8 } },
+              h(
+                'div',
+                { className: 'pp-row' },
+                h('span', { className: 'pp-grow' }, h('strong', null, p.name)),
+                p.archived ? h('span', { className: 'pp-tag' }, '已归档') : null,
+                p.kind === 'live' ? h('span', { className: 'pp-tag' }, p.sources.length > 1 ? `共生 ${p.sources.length}` : '活着') : null,
+                p.kind === 'copy' ? h('span', { className: 'pp-tag' }, '副本') : null,
+                p.at ? h('span', { className: 'pp-hint' }, p.at) : null,
+              ),
+              // 「乙工区 / 来自「乙工区」」把同一句话说了两遍：只有来源和名字不一样、
+              // 或者一份档案收了好几处时，这一行才带信息。
+              p.src && !(p.sources && p.sources.length === 1 && (p.sources[0].title || '') === p.name)
+                ? h('div', { className: 'pp-hint' }, p.src)
+                : null,
+              h('div', { className: 'pp-hint' }, line(p.counts)),
+              h(
+                'div',
+                { className: 'pp-row' },
+                h('button', { className: 'pp-btn', onClick: () => exportOne(p) }, '导出到桌面…'),
+                h('button', {
+                  className: 'pp-btn',
+                  onClick: () => {
+                    setApplyId(applyId === p.id ? '' : p.id)
+                    setTarget('')
+                    setDrop(null)
+                  },
+                }, '覆盖并替换…'),
+                p.kind.startsWith('live') ? null : h(Sure, { label: '永久删除', confirm: '真要永久删？', onYes: () => send({ op: 'purgeProfile', id: p.id }) }),
+              ),
+              applyId === p.id
+                ? h(
+                    'div',
+                    null,
+                    h(
+                      'div',
+                      { className: 'pp-row', style: { marginTop: 6 } },
+                      h(
+                        'select',
+                        { value: target, onChange: (e) => setTarget(e.target.value), style: { flex: '1 1 auto', minWidth: 0 } },
+                        h('option', { value: '' }, '选一个工作区…'),
+                        ...workspaces.map((w) => h('option', { key: w.dir, value: w.dir }, `${w.title}（脾气 ${w.counts.self} · 事件 ${w.counts.event}）`)),
+                      ),
+                      h('button', { className: 'pp-btn', 'data-primary': '1', disabled: !target, onClick: () => apply(p.id, target) }, '替换'),
+                    ),
+                    drop && drop.id === p.id
+                      ? h(
+                          'div',
+                          { className: 'pp-hint', style: { marginTop: 6 } },
+                          `「${drop.title}」里有 ${drop.counts.self} 条脾气、${drop.counts.user} 条印象、${drop.counts.event} 件事、${drop.counts.diary} 天日记。先把它归档再换？`,
+                          h(
+                            'div',
+                            { className: 'pp-row', style: { marginTop: 6 } },
+                            h('button', { className: 'pp-btn', 'data-primary': '1', onClick: () => apply(p.id, drop.target, 'yes') }, '归档并替换'),
+                            h('button', { className: 'pp-btn', onClick: () => apply(p.id, drop.target, 'no') }, '直接替换'),
+                            h('button', { className: 'pp-btn', onClick: () => setDrop(null) }, '取消'),
+                          ),
+                        )
+                      : null,
+                  )
+                : null,
+            ),
+          ),
+        ),
+      )
+    }
+
     function Settings({ data, onClose, send }) {
       const s = data.settings
       // The ceiling lives on the workspace store. With no workspace in hand the
@@ -875,7 +1019,6 @@ window.__ModuleLoader__.load({
       const [agentName, setAgentName] = useState(s.agentName || '')
       const [userCall, setUserCall] = useState(s.userCall || '')
       const [feat, setFeat] = useState(JSON.parse(JSON.stringify(s.features)))
-      const [restoreId, setRestoreId] = useState(null)
       const lv = [
         ['manual', '全手动', '只有我说「记」才写'],
         ['half', '半自动', '画像自动 · 承诺问我'],
@@ -981,47 +1124,6 @@ window.__ModuleLoader__.load({
               ? '0 = 不限。满了的那条会挂成一张卡问你：腾位置，还是就到这里。标了 ★ 的条目不占这个数。'
               : '先打开一个会话再改：这个数属于具体工作区，现在这里没有工作区可写。'),
           ),
-          (data.orphans || []).length
-            ? h(
-                'div',
-                null,
-                h('div', { className: 'pp-sub' }, `无主记忆（${data.orphans.length}）`),
-                h('div', { className: 'pp-hint' }, '归档或删掉的工作区留下的记忆都在这里。「找回…」会并回当前工作区；「永久删除」不可逆。'),
-                data.orphans.map((o) =>
-                  h(
-                    'div',
-                    { key: o.id, className: 'pp-row', style: { marginTop: 4 } },
-                    h('span', { className: 'pp-grow' }, `${o.from} · ${o.type === 'archive' ? '归档' : '工作区'} · ${o.n} 条 · ${o.at}`),
-                    h('button', { className: 'pp-btn', onClick: () => setRestoreId(o.id) }, '找回…'),
-                    h(Sure, {
-                      label: '永久删除',
-                      confirm: '真要永久删？',
-                      onYes: () => send({ op: 'purgeOrphan', id: o.id }),
-                    }),
-                  ),
-                ),
-                restoreId
-                  ? h(
-                      'div',
-                      { className: 'pp-hint', style: { marginTop: 6 } },
-                      '并回当前工作区；已有的条目不重复。',
-                      h(
-                        'button',
-                        {
-                          className: 'pp-btn',
-                          'data-primary': '1',
-                          style: { marginLeft: 8 },
-                          onClick: async () => {
-                            await send({ op: 'restoreArchive', id: restoreId })
-                            setRestoreId(null)
-                          },
-                        },
-                        '确认找回',
-                      ),
-                    )
-                  : null,
-              )
-            : null,
           h(
             'div',
             { className: 'pp-row', style: { justifyContent: 'flex-end' } },

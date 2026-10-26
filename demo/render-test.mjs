@@ -83,8 +83,32 @@ const fixture = {
     eventsCap: 20,
   },
   firstRun: true,
-  workspaces: [{ dir: 'C:\\Users\\me\\Desktop\\ds', title: 'ds', lastSeen: 1 }],
+  workspaces: [{ dir: 'C:\\Users\\me\\Desktop\\ds', title: 'ds', lastSeen: 1, counts: { self: 3, user: 1, event: 2, diary: 4 } }],
   orphans: [{ id: 'o9', from: 'ds', type: 'archive', n: 3, at: '昨天', dir: 'C:\\Users\\me\\Desktop\\ds', storeId: 's1' }],
+  profiles: [
+    {
+      id: 'live:s1',
+      kind: 'live',
+      name: 'ds',
+      sources: [{ dir: 'C:\\Users\\me\\Desktop\\ds', title: 'ds' }],
+      src: '来自「ds」',
+      counts: { self: 3, user: 1, event: 2, diary: 4, others: 1 },
+      total: 11,
+      archived: false,
+      at: '',
+    },
+    {
+      id: 'o9',
+      kind: 'orphan',
+      name: '旧人格',
+      sources: [{ dir: 'C:\\Users\\me\\Desktop\\ds', title: 'ds' }],
+      src: '来自「ds」',
+      counts: { self: 2, user: 1, event: 0, diary: 0, others: 0 },
+      total: 3,
+      archived: true,
+      at: '昨天',
+    },
+  ],
   pendingImport: null,
   integrityWarn: null,
   token: 'abc',
@@ -218,9 +242,10 @@ for (const [name, def] of renderTargets) {
       ok('second click fires exactly once', fired === 1, String(fired))
     }
   }
-  // Nothing irreversible may hang off a single click anywhere in the bundle.
-  ok('permanent delete goes through the guard', /label: '永久删除',[\s\S]{0,160}?op: 'purgeOrphan'/.test(source))
-  const oneClick = /onClick:\s*\([^)]*\)\s*=>\s*(?:send|commit)\(\{\s*op:\s*'(?:purgeOrphan|delEntry|delOtherEntry)'/
+  // Nothing irreversible may hang off a single click anywhere in the bundle: the
+  // profile panel is now the only place that can destroy something for good.
+  ok('permanent delete goes through the guard', /label: '永久删除',[\s\S]{0,160}?op: 'purgeProfile'/.test(source))
+  const oneClick = /onClick:\s*\([^)]*\)\s*=>\s*(?:send|commit)\(\{\s*op:\s*'(?:purgeProfile|purgeOrphan|delEntry|delOtherEntry)'/
   ok('no one-click irreversible delete', !oneClick.test(source))
 }
 
@@ -256,6 +281,56 @@ for (const [name, def] of renderTargets) {
     ok('locked field explains why', text.includes('先打开一个会话再改'), text.slice(-160))
   } else {
     ok('first run asks about the diary', false, 'panel missing')
+  }
+}
+
+// ---- the profiles panel: every workspace is a card, archived ones say so, and
+// ---- nothing irreversible is one click away ---------------------------------
+{
+  const panelDef = (slots['settings.section'] || [])[0]
+  const Panel = panelDef && (typeof panelDef.render === 'function' ? panelDef.render : panelDef.component || panelDef.Component)
+  const settle = async () => {
+    for (let pass = 0; pass < 8; pass++) { dirty = false; flatten(createElement(Panel, {}), []) }
+    for (const fn of effects.splice(0)) { try { await fn() } catch {} }
+    await new Promise((r) => setTimeout(r, 30))
+    let nodes = []
+    for (let pass = 0; pass < 10; pass++) { dirty = false; nodes = expand(createElement(Panel, {})) }
+    return nodes
+  }
+  if (typeof Panel === 'function') {
+    bags.delete(Panel.name || 'anon') // remount the panel so it reads the current fixture instead of a stale copy
+    fixture.firstRun = true
+    fixture.dir = 'C:\\Users\\me\\Desktop\\ds'
+    fixture.store.pending = []
+    let nodes = await settle()
+    const finishIntro = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('开始'))
+    if (finishIntro) finishIntro.props.onClick({ stopPropagation() {} })
+    nodes = await settle()
+    const refresh = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('刷新'))
+    if (refresh) refresh.props.onClick({ stopPropagation() {} })
+    nodes = await settle()
+    const open = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('人格档案'))
+    ok('the header offers the profiles panel', !!open)
+    if (open) open.props.onClick({ stopPropagation() {} })
+    nodes = await settle()
+    const text = textOf(nodes)
+    ok('profiles panel lists both cards', text.includes('ds') && text.includes('旧人格'), text.slice(0, 200))
+    // 名字和来源一样时不重复（live 的 ds 不该再写一遍「来自「ds」」），
+    // 名字不一样时（旧人格 ← ds）才写。
+    const srcCount = (text.match(/来自「ds」/g) || []).length
+    ok('a card says where it came from, but only when the name differs', srcCount === 1, `count=${srcCount}`)
+    ok('an archived card is labelled', text.includes('已归档'), text.slice(0, 200))
+    ok('export is offered', text.includes('导出到桌面…'))
+    ok('import is offered', text.includes('导入档案文件…'))
+    const del = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('永久删除'))
+    ok('deleting a profile exists', !!del)
+    if (del) {
+      del.props.onClick({ stopPropagation() {} })
+      nodes = await settle()
+      ok('one click only arms the delete', textOf(nodes).includes('确认删除'), textOf(nodes).slice(-120))
+    }
+  } else {
+    ok('profiles panel lists both cards', false, 'panel missing')
   }
 }
 

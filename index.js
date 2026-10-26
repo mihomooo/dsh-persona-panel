@@ -76,6 +76,9 @@ function emptyDb() {
     // through here: that job is a direct request, not a file.
     pendingImport: null,
     orphans: [],
+    // Copies that no longer belong to a live workspace: imported files, and
+    // archived ones that have already been used once to replace something.
+    profiles: [],
   }
 }
 
@@ -321,6 +324,12 @@ function settingsOf(db, dir) {
   if (!ws.settings || typeof ws.settings !== 'object') {
     ws.settings = JSON.parse(JSON.stringify(db.settings))
   }
+  // A workspace settings object can be partial: some ops write one key at a
+  // time, and older databases never had the newer keys. A missing key falls
+  // back to the template; an explicitly empty one (userCall: '') stays empty.
+  for (const k of ['level', 'agentName', 'userCall']) {
+    if (ws.settings[k] === undefined) ws.settings[k] = db.settings[k]
+  }
   ws.settings.features = ws.settings.features || {}
   for (const k of ['self', 'user', 'event', 'diary']) {
     if (!ws.settings.features[k]) ws.settings.features[k] = { on: true, rec: true }
@@ -462,6 +471,120 @@ function sharedAs(db, storeId) {
     .map(([dir, ws]) => ({ dir, title: ws.title }))
 }
 
+// ------------------------------------------------------------- profiles
+
+// A profile is a copy of a whole store plus the settings that shaped it, so a
+// persona can outlive the workspace it grew up in. Live workspaces are already
+// such a copy — they are listed from db.stores instead of being duplicated —
+// while db.profiles holds imported or used-up copies and db.orphans holds the
+// archived ones.
+const PROFILE_SOURCES = 3
+
+function storeCounts(store) {
+  const others = store?.others || []
+  return {
+    self: (store?.self || []).length,
+    user: (store?.user || []).length,
+    event: (store?.event || []).length,
+    diary: (store?.diary || []).length,
+    others: others.reduce((n, o) => n + (o.user || []).length + (o.event || []).length, 0),
+  }
+}
+
+function totalCount(counts) {
+  return counts.self + counts.user + counts.event + counts.diary + counts.others
+}
+
+// "Empty" has to mean really empty. A workspace that only kept a diary, only
+// group profiles, or only a queued write is still something a replace would
+// destroy, so none of those count as nothing.
+function storeIsEmpty(store) {
+  if (!store) return true
+  return totalCount(storeCounts(store)) === 0 && (store.pending || []).length === 0
+}
+
+function copyStore(store) {
+  return JSON.parse(JSON.stringify({
+    self: store?.self || [],
+    user: store?.user || [],
+    event: store?.event || [],
+    diary: store?.diary || [],
+    others: store?.others || [],
+    pending: store?.pending || [],
+  }))
+}
+
+function sourceText(sources) {
+  const list = (sources || []).filter(Boolean)
+  if (!list.length) return ''
+  const names = list.slice(0, PROFILE_SOURCES).map((s) => s.title || basename(s.dir || '') || '未命名')
+  const rest = list.length - names.length
+  return `来自「${names.join('」「')}」${rest > 0 ? ` 等 ${list.length} 个` : ''}`
+}
+
+function profileCard(id, kind, name, sources, store, archived, at) {
+  return {
+    id,
+    kind,
+    name: name || '未命名',
+    sources: (sources || []).filter((s) => s && (s.dir || s.title)),
+    src: sourceText(sources),
+    counts: storeCounts(store),
+    total: totalCount(storeCounts(store)),
+    archived: !!archived,
+    at: at || '',
+  }
+}
+
+function profileList(db) {
+  const live = []
+  for (const storeId of Object.keys(db.stores)) {
+    const owners = sharedAs(db, storeId)
+    if (!owners.length) continue
+    // The most recently used workspace names the profile, the three newest name
+    // its source line: a symbiote family is one persona, not three.
+    const ranked = [...owners].sort((a, b) => (db.workspaces[b.dir]?.lastSeen || 0) - (db.workspaces[a.dir]?.lastSeen || 0))
+    const last = Math.max(...ranked.map((o) => db.workspaces[o.dir]?.lastSeen || 0))
+    live.push({ ...profileCard(`live:${storeId}`, 'live', ranked[0].title, ranked, db.stores[storeId], false, ''), lastSeen: last })
+  }
+  live.sort((a, b) => b.lastSeen - a.lastSeen)
+  const copies = (db.profiles || []).map((p) => profileCard(p.id, 'copy', p.name, p.sources, p.store, false, p.at))
+  const archived = (db.orphans || []).map((o) => profileCard(o.id, 'orphan', o.from, o.sources || [{ dir: o.dir || '', title: o.from }], o.snap, true, o.at))
+  return [...live, ...copies, ...archived]
+}
+
+function profileData(db, id) {
+  const key = String(id || '')
+  if (key.startsWith('live:')) {
+    const storeId = key.slice(5)
+    const owners = sharedAs(db, storeId)
+    if (!owners.length) return null
+    const ranked = [...owners].sort((a, b) => (db.workspaces[b.dir]?.lastSeen || 0) - (db.workspaces[a.dir]?.lastSeen || 0))
+    const ws = db.workspaces[ranked[0].dir]
+    return {
+      kind: 'live',
+      name: ranked[0].title,
+      sources: ranked,
+      store: db.stores[storeId] || {},
+      settings: ws?.settings || {},
+      storeId,
+    }
+  }
+  const copy = (db.profiles || []).find((p) => p.id === key)
+  if (copy) return { kind: 'copy', name: copy.name, sources: copy.sources || [], store: copy.store || {}, settings: copy.settings || {} }
+  const orphan = (db.orphans || []).find((o) => o.id === key)
+  if (orphan) return { kind: 'orphan', name: orphan.from, sources: orphan.sources || [{ dir: orphan.dir || '', title: orphan.from }], store: orphan.snap || {}, settings: orphan.settings || {} }
+  return null
+}
+
+function profileFileName(name) {
+  const safe = String(name || '').replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'profile'
+  const now = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  const ts = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}`
+  return `dsh-persona-${safe}-${ts}.json`
+}
+
 function snapshot(db, dir) {
   const key = normalizeDir(dir)
   const ws = key ? db.workspaces[key] : null
@@ -509,6 +632,7 @@ function snapshot(db, dir) {
       // depend on insertion history rather than on anything the user can see.
       .sort((a, b) => b.lastSeen - a.lastSeen || String(a.title || a.dir).localeCompare(String(b.title || b.dir), 'zh')),
     orphans: db.orphans.map((o) => ({ id: o.id, from: o.from, type: o.type, n: o.n, at: o.at, dir: o.dir || '', storeId: o.storeId || '' })),
+    profiles: profileList(db),
     pendingImport: db.pendingImport && db.pendingImport.dir === key ? db.pendingImport : null,
     integrityWarn: db.integrityWarn || null,
   }
@@ -758,9 +882,42 @@ function searchTerms(query) {
 
 // Every term has to appear somewhere in the entry: two words are a filter, one
 // word is a net. Dates are searched too, so "10-25" or "2026-10" works.
-function searchHit(hay, terms) {
+//
+// Exact substring first, then "差不多": the characters in order, packed closely
+// enough to still be the same thought. People reach for a memory with half the
+// words right ("猫 生日" for 猫的生日), so exact-only search answered "没有" to
+// questions the memory could actually answer.
+const FUZZY_DENSITY = 0.34
+
+function fuzzyScore(text, term) {
+  if (!term) return 0
+  if (text.includes(term)) return 2
+  let i = 0
+  let first = -1
+  let last = -1
+  for (let j = 0; j < text.length && i < term.length; j += 1) {
+    if (text[j] !== term[i]) continue
+    if (first < 0) first = j
+    last = j
+    i += 1
+  }
+  if (i < term.length) return 0
+  const span = last - first + 1
+  return term.length / span >= FUZZY_DENSITY ? 1 : 0
+}
+
+// 2 when every term is literally there, 1 when some only matched loosely, 0 when
+// one of them is missing — a missing word is still a miss, otherwise "猫 生日"
+// would return every entry that merely says 生日.
+function searchScore(hay, terms) {
   const text = String(hay ?? '').toLowerCase()
-  return terms.every((t) => text.includes(t))
+  let loose = false
+  for (const t of terms) {
+    const s = fuzzyScore(text, t)
+    if (!s) return 0
+    if (s === 1) loose = true
+  }
+  return loose ? 1 : 2
 }
 
 function renderSearch(db, dir, store, query) {
@@ -771,42 +928,55 @@ function renderSearch(db, dir, store, query) {
   const push = (title, lines) => {
     if (lines.length) sections.push({ title, lines })
   }
+  // How well the words fit first, recency second: an exact hit must not be buried
+  // under a loose one that happens to be newer.
+  let looseHits = 0
+  const byDay = (x) => parseDay(x?.date)?.getTime() ?? 0
+  const pick = (list, textOf, dateOf) =>
+    (list || [])
+      .map((x) => ({ x, s: searchScore(textOf(x), terms) }))
+      .filter((r) => {
+        if (r.s === 1) looseHits += 1
+        return r.s > 0
+      })
+      .sort((a, b) => b.s - a.s || (dateOf ? dateOf(b.x) - dateOf(a.x) : 0))
+      .map((r) => r.x)
 
   push(
     '我的脾气',
-    (store.self || [])
-      .filter((t) => searchHit(`${t.label || ''} ${t.note || ''} ${t.text || ''}`, terms))
-      .map((t) =>
-        t.kind === 'note'
-          ? `[脾气补充] ${t.hard ? '[硬] ' : ''}${t.text}  ⟨${t.id}⟩`
-          : `[脾气] ${t.label}${t.intensity ? ` · ${STRENGTH[t.intensity] || t.intensity}` : ''}${t.note ? ` — ${t.note}` : ''}  ⟨${t.id}⟩`,
-      ),
+    pick(store.self, (t) => `${t.label || ''} ${t.note || ''} ${t.text || ''}`).map((t) =>
+      t.kind === 'note'
+        ? `[脾气补充] ${t.hard ? '[硬] ' : ''}${t.text}  ⟨${t.id}⟩`
+        : `[脾气] ${t.label}${t.intensity ? ` · ${STRENGTH[t.intensity] || t.intensity}` : ''}${t.note ? ` — ${t.note}` : ''}  ⟨${t.id}⟩`,
+    ),
   )
   push(
     `我眼里的${userCall ? `「${userCall}」` : '你'}`,
-    (store.user || []).filter((u) => searchHit(u.text, terms)).map((u) => `${u.text}  ⟨${u.id}⟩`),
+    pick(store.user, (u) => u.text).map((u) => `${u.text}  ⟨${u.id}⟩`),
   )
   push(
     '我记着的事',
-    (store.event || [])
-      .filter((e) => searchHit(`${e.text || ''} ${e.date || ''}`, terms))
-      .sort((a, b) => (parseDay(b.date)?.getTime() ?? 0) - (parseDay(a.date)?.getTime() ?? 0))
-      .map((e) => `${e.important ? '★ ' : ''}${e.text}${e.date ? ` · ${e.date}` : ''}${e.date && e.status && e.status !== 'open' ? ` · ${e.status}` : ''}  ⟨${e.id}⟩`),
+    pick(store.event, (e) => `${e.text || ''} ${e.date || ''}`, byDay).map(
+      (e) => `${e.important ? '★ ' : ''}${e.text}${e.date ? ` · ${e.date}` : ''}${e.date && e.status && e.status !== 'open' ? ` · ${e.status}` : ''}  ⟨${e.id}⟩`,
+    ),
   )
   push(
     '我写下的字（只读）',
-    (store.diary || [])
-      .filter((d) => searchHit(`${d.text || ''} ${d.date || ''}`, terms))
-      .sort((a, b) => (parseDay(b.date)?.getTime() ?? 0) - (parseDay(a.date)?.getTime() ?? 0))
-      .map((d) => `${d.date ? `${d.date} ` : ''}${d.text}`),
+    pick(store.diary, (d) => `${d.text || ''} ${d.date || ''}`, byDay).map((d) => `${d.date ? `${d.date} ` : ''}${d.text}`),
   )
   push(
     '别人',
     (store.others || []).flatMap((o) => {
       const name = `${o.name || ''} ${(o.aliases || []).join(' ')}`
       const hits = []
-      for (const u of o.user || []) if (searchHit(`${name} ${u.text || ''}`, terms)) hits.push(`[${o.name} · 印象] ${u.text}  ⟨${u.id}⟩`)
-      for (const e of o.event || []) if (searchHit(`${name} ${e.text || ''} ${e.date || ''}`, terms)) hits.push(`[${o.name} · 事] ${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`)
+      for (const u of o.user || []) {
+        const s = searchScore(`${name} ${u.text || ''}`, terms)
+        if (s) { if (s === 1) looseHits += 1; hits.push(`[${o.name} · 印象] ${u.text}  ⟨${u.id}⟩`) }
+      }
+      for (const e of o.event || []) {
+        const s = searchScore(`${name} ${e.text || ''} ${e.date || ''}`, terms)
+        if (s) { if (s === 1) looseHits += 1; hits.push(`[${o.name} · 事] ${e.text}${e.date ? `（${e.date}）` : ''}  ⟨${e.id}⟩`) }
+      }
       return hits
     }),
   )
@@ -817,7 +987,7 @@ function renderSearch(db, dir, store, query) {
     return [
       head,
       '换个词再找：人名、地点、事由都行，日期像 10-25 也可以。',
-      '也可以不带 query 再调一次看全量；或者 depth="index" 先扫日记目录。',
+      '也可以不带 query 再调一次看全量；或者 depth="index" 先扫目录。',
     ].join('\n')
   }
   const out = [head]
@@ -829,6 +999,7 @@ function renderSearch(db, dir, store, query) {
     out.push(`### ${s.title}（${s.lines.length} 条）`)
     for (const line of room) out.push(`- ${line}`)
   }
+  if (looseHits) out.push(`（其中 ${looseHits} 条是“大概”对上的：字没全对，顺序对上了。）`)
   if (total > shown) out.push(`（还有 ${total - shown} 条没列出来：把词写具体一点，或多分几次找。）`)
   out.push('（id 在尖括号里：要删就用它。日记只读。）')
   return out.join('\n')
@@ -864,14 +1035,40 @@ function renderRecall(db, dir, opts = {}) {
   const events = [...(store.event || [])].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0))
   if (events.length) {
     const cap = Number(eventsCap ?? 20)
-    out.push(`### 我记着的事（${events.length} 条${cap > 0 ? ` / 上限 ${cap}` : ' · 不限'}）`)
-    for (const e of events) {
-      const bits = [
-        `${e.important ? '★ ' : ''}${e.text}`,
-        e.date ? String(e.date) : '',
-        e.date && e.status && e.status !== 'open' ? e.status : '',
-      ].filter(Boolean)
-      out.push(`- ${bits.join(' · ')}  ⟨${e.id}⟩`)
+    const head = `${events.length} 条${cap > 0 ? ` / 上限 ${cap}` : ' · 不限'}`
+    if (opts.depth === 'index') {
+      // The same table of contents the diary has. Events were a flat pile: the
+      // only way to find "that thing in spring" was to read all of them. Months
+      // first, openings after, so the next call can aim instead of re-read.
+      out.push(`### 我记着的事（目录 · ${head} · 只读）`)
+      const months = new Map()
+      for (const e of events) {
+        // Same month key the diary uses, so both tables of contents read alike:
+        // a date is normalised through parseDay, and a bare MM-DD borrows the
+        // year it belongs to instead of showing up as its own bucket.
+        const d = parseDay(e.date)
+        const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '未标日期'
+        if (!months.has(key)) months.set(key, [])
+        months.get(key).push(e)
+      }
+      for (const [key, list] of months) {
+        const heads = list
+          .slice(0, 3)
+          .map((e) => `${e.important ? '★' : ''}${String(e.text).slice(0, 14)}${String(e.text).length > 14 ? '…' : ''}`)
+          .join(' / ')
+        out.push(`- ${key}（${list.length} 条${list.some((e) => e.important) ? ' · 有★' : ''}）${heads}${list.length > 3 ? ` …还有 ${list.length - 3} 条` : ''}`)
+      }
+      out.push('（先看月份，再按日期挑；要原文就去掉 depth 看全量，或带 query 按词找。）')
+    } else {
+      out.push(`### 我记着的事（${head}）`)
+      for (const e of events) {
+        const bits = [
+          `${e.important ? '★ ' : ''}${e.text}`,
+          e.date ? String(e.date) : '',
+          e.date && e.status && e.status !== 'open' ? e.status : '',
+        ].filter(Boolean)
+        out.push(`- ${bits.join(' · ')}  ⟨${e.id}⟩`)
+      }
     }
   }
   const diary = store.diary || []
@@ -1669,6 +1866,8 @@ function applyOps(db, body) {
         snap,
         storeId: ws.storeId,
         dir,
+        sources: sharedAs(db, ws.storeId),
+        settings: JSON.parse(JSON.stringify(settingsOf(db, dir))),
       })
       audit(db, { op, dir, n })
       break
@@ -1714,10 +1913,173 @@ function applyOps(db, body) {
       }
       break
     }
+    case 'applyProfile': {
+      const src = profileData(db, body.id)
+      // The panel shows one workspace at a time; replacing a different one is
+      // the normal case, so the target travels in the body.
+      const targetDir = normalizeDir(body.target || dir)
+      const ws = targetDir ? db.workspaces[targetDir] : null
+      const tstore = ws ? db.stores[ws.storeId] : null
+      if (!src) {
+        extra = { error: '找不到这份档案' }
+        break
+      }
+      if (!ws || !tstore) {
+        extra = { error: '那个工作区还没打开过：先点开一次它的会话再来' }
+        break
+      }
+      if (src.storeId && ws.storeId === src.storeId) {
+        extra = { same: true }
+        break
+      }
+      const empty = storeIsEmpty(tstore)
+      const choice = empty ? 'yes' : (body.archive === 'yes' || body.archive === 'no' ? body.archive : 'ask')
+      if (choice === 'ask') {
+        extra = { needsArchive: true, counts: storeCounts(tstore), title: ws.title || basename(targetDir), target: targetDir }
+        break
+      }
+      if (choice === 'yes' && !empty) {
+        // Nothing is destroyed without a way back: the outgoing persona becomes
+        // an archived profile before the incoming one takes its place.
+        db.orphans.unshift({
+          id: nextId(db, 'o'),
+          from: ws.title || basename(targetDir),
+          type: 'archive',
+          n: totalCount(storeCounts(tstore)),
+          at: stamp(),
+          snap: copyStore(tstore),
+          storeId: ws.storeId,
+          dir: targetDir,
+          sources: sharedAs(db, ws.storeId),
+          settings: JSON.parse(JSON.stringify(settingsOf(db, targetDir))),
+          why: 'replaced',
+        })
+      }
+      const fresh = nextStoreId(db)
+      db.stores[fresh] = { ...copyStore(src.store), cap: capOf(db, targetDir) }
+      ws.storeId = fresh
+      ws.settings = ws.settings || {}
+      if (src.settings && typeof src.settings === 'object') {
+        copyShared(ws.settings, src.settings)
+        if (Number.isFinite(Number(src.settings.eventsCap))) ws.settings.eventsCap = Math.max(0, Math.min(999, Math.floor(Number(src.settings.eventsCap))))
+        applySharedSettings(db, targetDir)
+      }
+      // An archived profile can replace something exactly once. Afterwards it is
+      // an ordinary profile: insurance, not a way to bring back the same day.
+      if (src.kind === 'orphan') {
+        const picked = db.orphans.find((o) => o.id === body.id)
+        if (picked) {
+          db.orphans = db.orphans.filter((o) => o.id !== body.id)
+          db.profiles.unshift({
+            id: nextId(db, 'p'),
+            name: picked.from,
+            sources: picked.sources || [],
+            at: stamp(),
+            store: picked.snap || {},
+            settings: picked.settings || {},
+            usedAt: stamp(),
+          })
+        }
+      }
+      extra = { applied: true, target: targetDir, archived: choice === 'yes' && !empty }
+      audit(db, { op, dir: targetDir, id: body.id, archived: choice === 'yes' && !empty })
+      break
+    }
+    case 'exportProfile': {
+      const src = profileData(db, body.id)
+      if (!src) {
+        extra = { error: '找不到这份档案' }
+        break
+      }
+      try {
+        // The panel cannot write files, so the host saves it where the user can
+        // find it without being told a path first.
+        const desktop = join(homedir(), 'Desktop')
+        mkdirSync(desktop, { recursive: true })
+        const file = join(desktop, profileFileName(src.name))
+        const store = copyStore(src.store)
+        writeFileSync(file, JSON.stringify({
+          kind: 'dsh-persona-profile',
+          v: 1,
+          name: src.name,
+          sources: (src.sources || []).map((s) => ({ dir: s.dir || '', title: s.title || '' })),
+          settings: src.settings || {},
+          store: { self: store.self, user: store.user, event: store.event, diary: store.diary, others: store.others },
+          exportedAt: new Date().toISOString(),
+        }, null, 2))
+        extra = { path: file }
+        audit(db, { op, id: body.id, path: file })
+      } catch (e) {
+        extra = { error: String(e?.message || e) }
+      }
+      break
+    }
+    case 'importProfile': {
+      let data = null
+      try {
+        data = JSON.parse(String(body.text || ''))
+      } catch {
+        extra = { error: '这不是一个 JSON 文件' }
+        break
+      }
+      if (!data || data.kind !== 'dsh-persona-profile' || !data.store) {
+        extra = { error: '这不是人格档案文件' }
+        break
+      }
+      const entry = {
+        id: nextId(db, 'p'),
+        name: String(body.name || data.name || '导入的档案').slice(0, 40),
+        sources: Array.isArray(data.sources) ? data.sources.slice(0, 20) : [],
+        at: stamp(),
+        store: copyStore(data.store),
+        settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
+      }
+      db.profiles.unshift(entry)
+      extra = { id: entry.id, name: entry.name, counts: storeCounts(entry.store) }
+      audit(db, { op, id: entry.id, name: entry.name })
+      break
+    }
+    case 'purgeProfile': {
+      const id = String(body.id || '')
+      if (id.startsWith('live:')) {
+        extra = { error: '活着的档案删不掉：要清空就去那个工作区归档' }
+        break
+      }
+      const before = (db.profiles || []).length + (db.orphans || []).length
+      db.profiles = (db.profiles || []).filter((p) => p.id !== id)
+      db.orphans = (db.orphans || []).filter((o) => o.id !== id)
+      extra = { removed: before - ((db.profiles || []).length + (db.orphans || []).length) }
+      audit(db, { op, id, removed: extra.removed })
+      break
+    }
     case 'copyFrom': {
       const src = storeOf(db, body.from)
       if (src && store && body.from !== dir) {
         const mode = body.mode === 'share' ? 'share' : 'copy'
+        // 'share' points the target at another store, so whatever it had is
+        // stranded: ask first, and archive it unless the user says to drop it.
+        // A plain copy only adds missing entries, so it destroys nothing.
+        const empty = storeIsEmpty(store)
+        if (mode === 'share' && !empty && body.archive !== 'yes' && body.archive !== 'no') {
+          extra = { needsArchive: true, counts: storeCounts(store), mode }
+          break
+        }
+        if (mode === 'share' && !empty && body.archive === 'yes') {
+          const ws = db.workspaces[dir]
+          db.orphans.unshift({
+            id: nextId(db, 'o'),
+            from: ws?.title || basename(dir),
+            type: 'archive',
+            n: totalCount(storeCounts(store)),
+            at: stamp(),
+            snap: copyStore(store),
+            storeId: ws?.storeId || '',
+            dir,
+            sources: sharedAs(db, ws?.storeId || ''),
+            settings: JSON.parse(JSON.stringify(settingsOf(db, dir))),
+            why: mode === 'share' ? 'before-share' : 'before-copy',
+          })
+        }
         if (mode === 'share') {
           const fromWs = db.workspaces[normalizeDir(body.from)]
           const ws = db.workspaces[dir]
@@ -1779,6 +2141,8 @@ function applyOps(db, body) {
               snap: JSON.parse(JSON.stringify(store)),
               storeId: ws.storeId,
               dir,
+              sources: sharedAs(db, ws.storeId),
+              settings: JSON.parse(JSON.stringify(settingsOf(db, dir))),
             })
           } else {
             delete db.stores[ws.storeId]

@@ -94,8 +94,8 @@ ok('client labels it 找回', client.includes('找回'))
 // not only inside a settings modal they have no reason to open.
 ok('client banner explains the archive', client.includes('被${o.type === \'archive\' ? \'归档\' : \'摘出\'}了'))
 ok('client banner filters by workspace', client.includes('o.dir === data.dir'))
-ok('settings names the path', client.includes('设置 → 无主记忆 → 找回…'))
-ok('archive confirm names the path', client.includes('无主记忆 → 找回…'))
+ok('settings hands archives to the profiles panel', client.includes('人格档案'))
+ok('archive confirm names the profiles panel', client.includes('在「人格档案」里能找到'))
 
 const bad = results.filter(([, pass]) => !pass).length
 console.log(`${results.length - bad}/${results.length} archive checks passed`)

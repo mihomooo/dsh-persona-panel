@@ -91,6 +91,16 @@ ok('a word can hit the impression section alone', mixed.includes('养了一只�
 const miss = await recall({ query: '量子力学' })
 ok('no hit says so instead of inventing', miss.includes('没有') && miss.includes('换个词'), miss.slice(0, 120))
 
+// 大概符合: the words are in the right order but not glued together. People
+// remember "夜…以前", not the sentence as it was written.
+const loose = await recall({ query: '夜里以前' })
+ok('out-of-order gaps still find the line', loose.includes('夜里想了很多以前的事'), loose.slice(0, 200))
+ok('loose hits say they are approximate', loose.includes('大概'), loose.slice(0, 200))
+
+// But a word that is simply absent is still a miss: fuzzy is not "any word wins".
+const half = await recall({ query: '猫 量子' })
+ok('one missing word is still a miss', half.includes('没有'), half.slice(0, 160))
+
 const plain = await recall({})
 ok('no query still returns the whole drawer', plain.includes('我记着的事') && plain.includes('我写下的字') && plain.includes('我眼里的'), plain.slice(0, 80))
 

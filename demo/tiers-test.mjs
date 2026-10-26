@@ -117,11 +117,20 @@ ok('all is all', diaryCount(full) === 100)
 ok('events stay whole in recall', (full.match(/^- 事件\d+/gm) || []).length === 30)
 
 const index = await recall({ depth: 'index' })
-const months = [...index.matchAll(/^- (\d{4}-\d{2})（(\d+) 条）/gm)]
+const diaryPart = index.slice(index.indexOf('### 我写下的字'))
+const months = [...diaryPart.matchAll(/^- (\d{4}-\d{2})（(\d+) 条）/gm)]
 ok('index groups by month', months.length >= 3 && months.length <= 5)
 ok('index counts add up', months.reduce((n, m) => n + Number(m[2]), 0) === 100)
 ok('index previews are clipped', index.includes('…') && months.length < 8)
 ok('index is much shorter than all', index.length * 2 < full.length)
+
+// Events get the same table of contents as the diary: a bucket per month (or one
+// for the undated ones), with counts and openings instead of all thirty lines.
+const eventPart = index.slice(index.indexOf('### 我记着的事'), index.indexOf('### 我写下的字'))
+ok('event index exists', eventPart.includes('我记着的事（目录'))
+ok('event index buckets by month or says undated', /- (\d{4}-\d{2}|未标日期)（\d+ 条/.test(eventPart), eventPart.slice(0, 200))
+ok('event index counts add up', [...eventPart.matchAll(/（(\d+) 条/g)].reduce((n, m) => n + Number(m[1]), 0) === 30)
+ok('event index is only in the catalogue', !full.includes('我记着的事（目录'))
 
 console.log(failed ? `${failed} failed` : 'all passed')
 process.exit(failed ? 1 : 0)

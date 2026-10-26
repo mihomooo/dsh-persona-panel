@@ -119,7 +119,9 @@ await tools.persona_remember.execute({ kind: 'user', text: 'B 独有' }, { agent
 s = await snap(dirA)
 ok('copy does not leak back to A', !s.store.user.some((u) => u.text === 'B 独有'))
 
-await call({ op: 'copyFrom', from: dirA, mode: 'share' }, dirB)
+// Sharing strands the target's own store, so the panel asks first; this test
+// answers "just do it".
+await call({ op: 'copyFrom', from: dirA, mode: 'share', archive: 'no' }, dirB)
 const afterShareA = await snap(dirA)
 const afterShareB = await snap(dirB)
 ok('share points both at one store', afterShareA.storeId === afterShareB.storeId)
