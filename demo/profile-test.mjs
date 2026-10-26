@@ -138,6 +138,31 @@ const normal = s.profiles.find((p) => p.kind === 'copy' && p.name === 'p-b')
 ok('it comes back as a normal profile', !!normal && normal.archived === false, JSON.stringify(s.profiles.map((p) => [p.name, p.kind, p.archived])))
 ok('and the workspace got its old persona back', s.store.self[0].label === '安静', s.store.self[0]?.label)
 
+// A live card is a mirror; saving one freezes it. Later edits to the workspace
+// must not reach into the snapshot.
+const liveB0 = (await snap(dirB)).profiles.find((p) => p.kind === 'live' && p.name === 'p-b')
+const snapR = await call(dirB, { op: 'snapshotProfile', id: liveB0.id })
+ok('a snapshot returns a new profile id', !!snapR.extra?.id, JSON.stringify(snapR).slice(0, 160))
+s = await snap(dirB)
+const snapCard = byId(s.profiles, snapR.extra.id)
+ok('the snapshot is an ordinary copy', snapCard?.kind === 'copy' && snapCard?.archived === false, JSON.stringify(snapCard))
+ok('the snapshot is named after the moment', String(snapCard?.name).includes('快照'), snapCard?.name)
+ok('the snapshot holds what the workspace had', snapCard?.counts.self === 1, JSON.stringify(snapCard?.counts))
+
+// Replace the live workspace with another persona, then read the snapshot back.
+const cardA1 = (await snap(dirB)).profiles.find((p) => p.kind === 'live' && p.name === 'p-a')
+r = await call(dirB, { op: 'applyProfile', id: cardA1.id, archive: 'no' })
+ok('the workspace moved on', (await snap(dirB)).store.self[0]?.label === '耐心', JSON.stringify(r).slice(0, 120))
+r = await call(dirB, { op: 'exportProfile', id: snapR.extra.id })
+const frozen = JSON.parse(readFileSync(r.extra.path, 'utf8'))
+unlinkSync(r.extra.path)
+ok('the snapshot did not move with it', frozen.store.self[0]?.label === '安静', JSON.stringify(frozen.store.self).slice(0, 120))
+
+// A snapshot is also a usable archive: put p-b back from it.
+r = await call(dirB, { op: 'applyProfile', id: snapR.extra.id, archive: 'no' })
+ok('a snapshot can be applied back', (await snap(dirB)).store.self[0]?.label === '安静', JSON.stringify(r).slice(0, 120))
+
+
 // Export writes a file the user can find; import reads it back.
 const liveB = s.profiles.find((p) => p.kind === 'live')
 r = await call(dirB, { op: 'exportProfile', id: liveB.id })

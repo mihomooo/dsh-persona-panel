@@ -886,6 +886,7 @@ window.__ModuleLoader__.load({
       const [target, setTarget] = useState('')
       const [drop, setDrop] = useState(null)
       const [msg, setMsg] = useState('')
+      const [members, setMembers] = useState('')
       const fileRef = useRef(null)
 
       const line = (c) => {
@@ -962,10 +963,22 @@ window.__ModuleLoader__.load({
                 { className: 'pp-row' },
                 h('span', { className: 'pp-grow' }, h('strong', null, p.name)),
                 p.archived ? h('span', { className: 'pp-tag' }, '已归档') : null,
-                p.kind === 'live' ? h('span', { className: 'pp-tag' }, p.sources.length > 1 ? `共生 ${p.sources.length}` : '活着') : null,
+                p.kind === 'live' && p.sources.length > 1
+                  ? h(
+                      'button',
+                      { className: 'pp-tag', style: { cursor: 'pointer' }, onClick: () => setMembers(members === p.id ? '' : p.id) },
+                      `共生 ${p.sources.length}${members === p.id ? ' ▾' : ' ▸'}`,
+                    )
+                  : null,
+                p.kind === 'live' && p.sources.length <= 1 ? h('span', { className: 'pp-tag' }, '活着') : null,
                 p.kind === 'copy' ? h('span', { className: 'pp-tag' }, '副本') : null,
                 p.at ? h('span', { className: 'pp-hint' }, p.at) : null,
               ),
+              // A symbiote family is one persona; the members are still worth
+              // naming, because "which folders share this" is the whole point.
+              members === p.id && p.sources.length > 1
+                ? h('div', { className: 'pp-hint' }, `这几个工作区共用这一份：${p.sources.map((s) => s.title || s.dir).join('、')}`)
+                : null,
               // 「乙工区 / 来自「乙工区」」把同一句话说了两遍：只有来源和名字不一样、
               // 或者一份档案收了好几处时，这一行才带信息。
               p.src && !(p.sources && p.sources.length === 1 && (p.sources[0].title || '') === p.name)
@@ -975,6 +988,21 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'pp-row' },
+                p.kind === 'live'
+                  ? h(
+                      'button',
+                      {
+                        className: 'pp-btn',
+                        title: '把这一刻存成一份独立的副本，之后工作区再改也不影响它',
+                        onClick: async () => {
+                          const body = await send({ op: 'snapshotProfile', id: p.id })
+                          const x = (body && body.extra) || {}
+                          setMsg(x.error || `已存成快照：${x.name || ''}`)
+                        },
+                      },
+                      '存一份快照',
+                    )
+                  : null,
                 h('button', { className: 'pp-btn', onClick: () => exportOne(p) }, '导出到桌面…'),
                 h('button', {
                   className: 'pp-btn',

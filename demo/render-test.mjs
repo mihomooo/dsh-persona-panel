@@ -108,6 +108,23 @@ const fixture = {
       archived: true,
       at: '昨天',
     },
+    {
+      // Two workspaces sharing one store are ONE persona: the card says 共生 2
+      // and the members are one click away, because "which folders" decides
+      // whether a replace is safe.
+      id: 'live:s2',
+      kind: 'live',
+      name: '甲工区',
+      sources: [
+        { dir: 'C:\\tmp\\甲', title: '甲工区' },
+        { dir: 'C:\\tmp\\乙', title: '乙工区' },
+      ],
+      src: '来自「甲工区」「乙工区」',
+      counts: { self: 0, user: 0, event: 0, diary: 0, others: 0 },
+      total: 0,
+      archived: false,
+      at: '',
+    },
   ],
   pendingImport: null,
   integrityWarn: null,
@@ -323,6 +340,16 @@ for (const [name, def] of renderTargets) {
     ok('an archived card is labelled', text.includes('已归档'), text.slice(0, 200))
     ok('export is offered', text.includes('导出到桌面…'))
     ok('import is offered', text.includes('导入档案文件…'))
+    ok('a live card can be frozen into a snapshot', text.includes('存一份快照'))
+    ok('a symbiote card counts its members once', text.includes('共生 2'), text.slice(0, 240))
+    const sym = findNode(nodes, (n) => n.type === 'button' && String((n.children || []).join('')).startsWith('共生 2'))
+    ok('the symbiote tag is expandable', !!sym)
+    if (sym) {
+      sym.props.onClick({ stopPropagation() {} })
+      nodes = await settle()
+      const members = textOf(nodes)
+      ok('expanding names the folders that share it', members.includes('共用这一份') && members.includes('乙工区'), members.slice(0, 240))
+    }
     const del = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('永久删除'))
     ok('deleting a profile exists', !!del)
     if (del) {

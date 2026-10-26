@@ -2039,6 +2039,33 @@ function applyOps(db, body) {
       audit(db, { op, id: entry.id, name: entry.name })
       break
     }
+    case 'snapshotProfile': {
+      // A live card is a mirror: whatever the workspace holds right now. Saving
+      // one is how a moment gets frozen — after this it is an ordinary copy and
+      // later edits to the workspace do not touch it.
+      const src = profileData(db, body.id)
+      if (!src) {
+        extra = { error: '找不到这份档案' }
+        break
+      }
+      const settings = src.kind === 'live' && src.sources && src.sources[0]
+        ? JSON.parse(JSON.stringify(settingsOf(db, src.sources[0].dir)))
+        : JSON.parse(JSON.stringify(src.settings || {}))
+      const label = `${src.name} · 快照 ${stampNow()}`.slice(0, 40)
+      const entry = {
+        id: nextId(db, 'p'),
+        name: label,
+        sources: (src.sources || []).map((s) => ({ dir: s.dir || '', title: s.title || '' })),
+        at: stampNow(),
+        store: copyStore(src.store),
+        settings,
+        snapshotOf: String(body.id || ''),
+      }
+      db.profiles.unshift(entry)
+      extra = { id: entry.id, name: entry.name, counts: storeCounts(entry.store) }
+      audit(db, { op, id: entry.id, from: body.id, counts: extra.counts })
+      break
+    }
     case 'purgeProfile': {
       const id = String(body.id || '')
       if (id.startsWith('live:')) {
