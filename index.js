@@ -2083,15 +2083,21 @@ function applyOps(db, body) {
       const src = storeOf(db, body.from)
       if (src && store && body.from !== dir) {
         const mode = body.mode === 'share' ? 'share' : 'copy'
-        // 'share' points the target at another store, so whatever it had is
-        // stranded: ask first, and archive it unless the user says to drop it.
-        // A plain copy only adds missing entries, so it destroys nothing.
+        // Both directions overwrite something the user may want back: a share
+        // strands the old store, and a copy lands on top of a persona that is
+        // already there. Either way, ask whether to keep an archived profile
+        // first — an extra click is cheaper than a lost persona.
         const empty = storeIsEmpty(store)
-        if (mode === 'share' && !empty && body.archive !== 'yes' && body.archive !== 'no') {
-          extra = { needsArchive: true, counts: storeCounts(store), mode }
+        if (!empty && body.archive !== 'yes' && body.archive !== 'no') {
+          extra = {
+            needsArchive: true,
+            counts: storeCounts(store),
+            mode,
+            title: db.workspaces[dir]?.title || basename(dir),
+          }
           break
         }
-        if (mode === 'share' && !empty && body.archive === 'yes') {
+        if (!empty && body.archive === 'yes') {
           const ws = db.workspaces[dir]
           db.orphans.unshift({
             id: nextId(db, 'o'),

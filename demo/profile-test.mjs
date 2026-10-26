@@ -195,11 +195,18 @@ const cardA3 = (await snap(dirA)).profiles.find((p) => p.kind === 'live' && p.na
 r = await call(dirA, { op: 'applyProfile', id: cardA3.id, target: dirC })
 ok('a replace can name another workspace', r.extra?.needsArchive === true && r.extra?.target === dirC, JSON.stringify(r.extra))
 
-// Sharing strands the target's store without destroying it by accident.
+// Sharing strands the target's store without destroying it by accident; a
+// plain copy lands on a persona that is already there, so both ask first.
 r = await call(dirB, { op: 'copyFrom', from: dirA, mode: 'share' })
 ok('sharing asks before stranding a store', r.extra?.needsArchive === true, JSON.stringify(r.extra))
 r = await call(dirB, { op: 'copyFrom', from: dirA, mode: 'copy' })
-ok('a plain copy destroys nothing, so it does not ask', r.extra?.needsArchive === undefined, JSON.stringify(r.extra))
+ok('a plain copy asks before it lands on someone', r.extra?.needsArchive === true, JSON.stringify(r.extra))
+const archivedBefore = (await snap(dirB)).profiles.filter((p) => p.archived).length
+r = await call(dirB, { op: 'copyFrom', from: dirA, mode: 'copy', archive: 'no' })
+ok('answering no copies without keeping a backup', (await snap(dirB)).profiles.filter((p) => p.archived).length === archivedBefore, JSON.stringify(r).slice(0, 120))
+r = await call(dirB, { op: 'copyFrom', from: dirA, mode: 'copy', archive: 'yes' })
+const archivedAfter = (await snap(dirB)).profiles.filter((p) => p.archived).length
+ok('answering yes keeps a backup profile first', archivedAfter === archivedBefore + 1, `${archivedBefore} -> ${archivedAfter}`)
 
 if (exportPath) unlinkSync(exportPath)
 

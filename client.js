@@ -1198,6 +1198,15 @@ window.__ModuleLoader__.load({
       const others = (data.workspaces || []).filter((w) => w.dir !== data.dir)
       const [from, setFrom] = useState(others[0]?.dir || '')
       const [mode, setMode] = useState('copy')
+      const [ask, setAsk] = useState(null)
+      const run = async (archive) => {
+        if (!from) return
+        const body = await send({ op: 'copyFrom', from, mode, ...(archive ? { archive } : {}) })
+        const x = (body && body.extra) || {}
+        if (x.needsArchive) { setAsk(x); return }
+        onClose()
+      }
+      const askLine = (c) => (c ? `脾气 ${c.self}、印象 ${c.user}、事件 ${c.event}、日记 ${c.diary}` : '')
       return h(
         'div',
         { className: 'pp-mask' },
@@ -1230,6 +1239,24 @@ window.__ModuleLoader__.load({
                 ),
               )
             : h('div', { className: 'pp-empty' }, '还没有别的工作区可以借。'),
+          ask
+            ? h(
+                'div',
+                {
+                  className: 'pp-col',
+                  style: { display: 'flex', flexDirection: 'column', gap: 8, padding: 10 },
+                },
+                h('div', null, `「${ask.title || '这个工作区'}」里有 ${askLine(ask.counts)}。先存一份已归档档案再继续？`),
+                h(
+                  'div',
+                  { className: 'pp-row' },
+                  h('button', { className: 'pp-btn', 'data-primary': '1', onClick: () => run('yes') }, '归档并继续'),
+                  h('button', { className: 'pp-btn', onClick: () => run('no') }, '直接继续'),
+                  h('button', { className: 'pp-btn', onClick: () => setAsk(null) }, '取消'),
+                ),
+                h('div', { className: 'pp-hint' }, '归档的那份留在「人格档案」里，用得着就找回，用不着就删。'),
+              )
+            : null,
           h(
             'div',
             { className: 'pp-row', style: { justifyContent: 'flex-end' } },
@@ -1239,10 +1266,7 @@ window.__ModuleLoader__.load({
               {
                 className: 'pp-btn',
                 'data-primary': '1',
-                onClick: async () => {
-                  if (from) await send({ op: 'copyFrom', from, mode })
-                  onClose()
-                },
+                onClick: () => run(''),
               },
               mode === 'share' ? '共过来' : '复制过来',
             ),

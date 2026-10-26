@@ -188,6 +188,13 @@ ok('long text truncated to 4000', s.store.user.every((u) => u.text.length <= 400
 const auditPath = join(process.env.DSH_HOME, 'persona-panel', 'audit.log')
 ok('audit log exists', existsSync(auditPath) && readFileSync(auditPath, 'utf8').length > 0)
 
+// --- both borrow directions ask before they touch a non-empty persona -----
+// (the host side is covered in profile-test; this catches the dialog being
+// simplified back into a one-click overwrite)
+const clientSrc = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+ok('the copy dialog offers to archive first', clientSrc.includes('归档并继续') && clientSrc.includes('直接继续'))
+ok('both modes go through the same confirm', /copyFrom', from, mode, \.\.\.\(archive \? \{ archive \}/.test(clientSrc), 'copyFrom call has no archive path')
+
 const failed = results.filter((x) => !x[1])
 console.log(`${results.length - failed.length} passed, ${failed.length} failed`)
 for (const [name, , extra] of failed) console.log(' -', name, extra ?? '')
