@@ -5,12 +5,14 @@
 
 余下流程与文案保留在下面，供下次发新版或修改条目时复用。
 
-## 步骤 0：Release 已就绪（2026-10-25 完成，0.5.2 为 latest）
+## 步骤 0：Release 已就绪（2026-10-26 更新，0.5.3 为 latest）
 
-[v0.5.2](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.5.2) 已发布为 latest，
-附件 `dsh-persona-panel.tgz`（130,205 字节，SHA-256 `4d9056195826f702c27c51bea0d2bba134c158dd04a38dae3d24c34bb60e525b`，0.5.2 内容）。
+[v0.5.3](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.5.3) 已发布为 latest，
+附件 `dsh-persona-panel.tgz`（131,069 字节，SHA-256 `142b08b735bcdddad4f6526e11224684ed39dd73dbc66188f5199f00ab886a57`，0.5.3 内容）。
 市场条目里的 `tarball`（`releases/latest/download/dsh-persona-panel.tgz`）现在指向它；条目写 `latest`
 就是让包跟着最新版本走，以后发新版不必改条目。发新版前先确认 latest 已经挪过去，再提 PR。
+（0.5.3 修了两处“看起来存了其实没存”：没有工作区时事件上限落进默认值、面板置灰并说明；
+首次引导把「日记」也问一遍。PR #9584 尚未合并，条目本身不需要改。）
 
 ## 要提交的文件
 
