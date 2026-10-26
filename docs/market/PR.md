@@ -1,6 +1,9 @@
-# 投稿到 awesome-dsh-plugin（草稿）
+# 投稿到 awesome-dsh-plugin
 
-前置：仓库创建满 1 天 → 最早 `2026-10-26 15:23 +08` 之后提交。
+**已提交：2026-10-26 → [PR #9584](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9584)**
+（1 commit / 1 file / +7；`mergeable=True`，`action_required` 是首次贡献者需要维护者点一次批准跑 CI，属正常。）
+
+余下流程与文案保留在下面，供下次发新版或修改条目时复用。
 
 ## 步骤 0：Release 已就绪（2026-10-25 完成，0.5.2 为 latest）
 
