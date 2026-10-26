@@ -472,20 +472,28 @@ window.__ModuleLoader__.load({
                   h(
                     'span',
                     { className: 'pp-grow' },
-                    `这个工作区的 ${o.n} 条记忆在 ${o.at} 被${o.type === 'archive' ? '归档' : '摘出'}了。它们还在，只是不参与填写。`,
+                    `这个工作区的 ${o.n} 条记忆在 ${o.at} 被${o.type === 'archive' ? '归档' : '摘出'}了。它们还在，收在「人格档案」里标着「已归档」——能导出，也能拿去覆盖别的工作区。`,
                   ),
                   h(
                     'button',
                     {
                       className: 'pp-btn',
                       'data-primary': '1',
+                      onClick: () => setModal({ kind: 'profiles' }),
+                    },
+                    '打开人格档案',
+                  ),
+                  h(
+                    'button',
+                    {
+                      className: 'pp-btn',
+                      title: '把这份归档合并回这个工作区',
                       onClick: async () => {
                         await send({ op: 'restoreArchive', id: o.id })
                       },
                     },
-                    '找回',
+                    '合并回这里',
                   ),
-                  h('button', { className: 'pp-btn', onClick: () => setModal({ kind: 'settings' }) }, '去设置'),
                 ),
               ),
             h(
@@ -868,7 +876,11 @@ window.__ModuleLoader__.load({
     // 人格档案：一份档案是一整套记忆的副本（人设、画像、事件、日记、别人，连同称呼和词库），
     // 不跟着工作区活。活着的工区自己就是一份；归档的、导入的排在同一张表里。
     function Profiles({ data, onClose, send }) {
-      const list = data.profiles || []
+      // The client bundle can be newer than the host that is already running
+      // (the host half is loaded once at boot). Say so instead of showing an
+      // empty list that looks like "my memories are gone".
+      const hostOld = !Array.isArray(data.profiles)
+      const list = hostOld ? [] : data.profiles
       const workspaces = data.workspaces || []
       const [applyId, setApplyId] = useState('')
       const [target, setTarget] = useState('')
@@ -936,7 +948,11 @@ window.__ModuleLoader__.load({
             h('span', { className: 'pp-grow pp-hint' }, msg || `共 ${list.length} 份，其中 ${list.filter((p) => p.archived).length} 份已归档`),
             h('button', { className: 'pp-btn', onClick: onClose }, '关闭'),
           ),
-          !list.length ? h('div', { className: 'pp-hint' }, '还没有档案。打开过的工作区会自己出现在这里。') : null,
+          !list.length ? (
+            hostOld
+              ? h('div', { className: 'pp-hint' }, '宿主还是旧版本：档案这条路要重启一次 DeepSeek Harness 才会挂上。重启后这里会列出每个工作区和每一份已归档的记忆。')
+              : h('div', { className: 'pp-hint' }, '还没有档案。打开过的工作区会自己出现在这里。')
+          ) : null,
           list.map((p) =>
             h(
               'div',

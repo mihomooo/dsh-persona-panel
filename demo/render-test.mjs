@@ -214,7 +214,8 @@ for (const [name, def] of renderTargets) {
       // Discovery: an archive of this very workspace must surface a way back
       // without opening settings.
       ok('archived workspace shows a banner', text.includes('被归档了'), text.slice(0, 200))
-      ok('banner offers 找回', text.includes('找回'))
+      ok('banner points at the profile panel, not settings', text.includes('打开人格档案'))
+      ok('banner still offers merging the archive back', text.includes('合并回这里'))
     }
   } catch (e) {
     ok(`render ${name} clean`, false, e.message)
