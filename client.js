@@ -453,8 +453,7 @@ window.__ModuleLoader__.load({
               ),
               h('button', { className: 'pp-btn', onClick: () => send({ op: 'acceptIntegrity' }) }, '是我改的'),
             )
-          : null,
-        h(
+          : null,        h(
           'div',
           { className: 'pp-body' },
           // workspaces
@@ -1142,6 +1141,7 @@ window.__ModuleLoader__.load({
       const [agentName, setAgentName] = useState(s.agentName || '')
       const [userCall, setUserCall] = useState(s.userCall || '')
       const [feat, setFeat] = useState(JSON.parse(JSON.stringify(s.features)))
+      const [nudge, setNudge] = useState(!(s.nudge && s.nudge.on === false))
       const lv = [
         ['manual', '全手动', '只有我说「记」才写'],
         ['half', '半自动', '画像自动 · 承诺问我'],
@@ -1253,6 +1253,17 @@ window.__ModuleLoader__.load({
           ),
           h(
             'div',
+            { className: 'pp-field' },
+            h(
+              'label',
+              { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('input', { type: 'checkbox', checked: nudge, onChange: (e) => setNudge(e.target.checked) }),
+              '记录提醒',
+            ),
+            h('div', { className: 'pp-hint' }, '开着时，一个会话里连着好几轮没记东西，就会在对话末尾轻轻提一句。它不进系统提示，所以不影响缓存；一个会话最多两次。'),
+          ),
+          h(
+            'div',
             { className: 'pp-row', style: { justifyContent: 'flex-end' } },
             h('button', {
               className: 'pp-btn',
@@ -1264,6 +1275,7 @@ window.__ModuleLoader__.load({
                     level,
                     agentName,
                     userCall,
+                    nudge: { on: !!nudge },
                     ...(hasWs ? { eventsCap: Number.isFinite(Number(cap)) ? Math.max(0, Math.floor(Number(cap))) : 20 } : {}),
                     lexicon: lex.split(/[\s,，、]+/).filter(Boolean),
                   },

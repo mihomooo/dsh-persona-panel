@@ -11,7 +11,7 @@
  *
  * Node builtins only: a plugin ships without dependencies.
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -66,6 +66,10 @@ function emptyDb() {
       lexicon: [...DEFAULT_LEXICON],
       // 0 means "no ceiling". Everything else counts event entries.
       eventsCap: 20,
+      // A short reminder delivered as a tail message (never inside the system
+      // prompt, so it cannot invalidate the cached prefix) when a session has
+      // gone a while without writing anything.
+      nudge: { on: true },
       agentName: 'DeepSeek Harness',
       userCall: '',
     },
@@ -131,9 +135,33 @@ function saveDb(db) {
   const root = dataRoot()
   mkdirSync(root, { recursive: true })
   const file = join(root, 'db.json')
+  dailyBackup(root, file)
   const tmp = `${file}.tmp`
   writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf8')
   renameSync(tmp, file)
+}
+
+// One copy per day, seven kept. A torn write already has its own path (loadDb
+// renames the bad file), but that only helps if the file can be parsed at all;
+// a silent logical loss (a workspace archived by mistake, a store dropped)
+// needs yesterday's bytes to come back from.
+const BACKUP_KEEP = 7
+function dailyBackup(root, file) {
+  try {
+    if (!existsSync(file)) return
+    const dir = join(root, 'backups')
+    mkdirSync(dir, { recursive: true })
+    const stamp = new Date().toISOString().slice(0, 10)
+    const target = join(dir, `db-${stamp}.json`)
+    if (existsSync(target)) return
+    copyFileSync(file, target)
+    const list = readdirSync(dir).filter((n) => /^db-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort()
+    for (const old of list.slice(0, Math.max(0, list.length - BACKUP_KEEP))) {
+      try {
+        rmSync(join(dir, old))
+      } catch {}
+    }
+  } catch {}
 }
 
 function audit(db, entry) {
@@ -174,7 +202,10 @@ function checkIntegrity(db) {
   }
   const changed = Object.keys(current).filter((f) => current[f] && baseline[f] && current[f] !== baseline[f])
   if (changed.length) {
-    db.integrityWarn = { at: new Date().toISOString(), files: changed }
+    // Logged, not surfaced: this fires every time the plugin is edited, and a
+    // banner that reappears after the user dismissed it trains them to ignore
+    // warnings. The baseline is refreshed so it stays a one-line boot record.
+    db.integrity = { files: current, at: new Date().toISOString(), changedAt: new Date().toISOString() }
     bootLog(new Error(`plugin files changed since last run: ${changed.join(', ')}`), 'integrity')
     return true
   }
@@ -343,6 +374,8 @@ function settingsOf(db, dir) {
   // Other people are opt-in per workspace: absent means off, not on.
   if (!ws.settings.features.others) ws.settings.features.others = { on: false, rec: false }
   if (!Array.isArray(ws.settings.lexicon)) ws.settings.lexicon = db.settings.lexicon || []
+  if (!ws.settings.nudge || typeof ws.settings.nudge !== 'object') ws.settings.nudge = { on: true }
+  if (typeof ws.settings.nudge.on !== 'boolean') ws.settings.nudge.on = true
   ws.settings.eventsCap = capOf(db, key)
   const shared = db.stores[ws.storeId]
   if (shared && typeof shared.cap !== 'number') shared.cap = ws.settings.eventsCap
@@ -763,14 +796,41 @@ function fitDiary(entries, budget) {
   return { lines, truncated: lines.length < entries.length }
 }
 
+// The first lines of a long prompt are the ones that survive a busy context, so
+// the three strongest traits, the hard rules and the three most important facts
+// about the user are repeated at the very top. They are then skipped in the full
+// lists below, so this costs almost nothing in length.
+const CORE_LIMIT = 420
+function coreBlock(store, features, userCall) {
+  const self = features.self?.on ? store.self || [] : []
+  const hard = self.filter((e) => e.kind === 'note' && e.hard)
+  const traits = self.filter((e) => e.kind !== 'note').sort((a, b) => (b.intensity || 0) - (a.intensity || 0))
+  const users = features.user?.on ? store.user || [] : []
+  const lines = []
+  const ids = new Set()
+  let used = 0
+  const take = (line, id) => {
+    if (!line || used + line.length > CORE_LIMIT) return false
+    lines.push(line)
+    ids.add(id)
+    used += line.length
+    return true
+  }
+  for (const n of hard.slice(0, 3)) take(`[硬] ${n.text}`, n.id)
+  for (const t of traits.slice(0, 3)) take(`${t.label}${t.note ? `（${t.note}）` : ''}`, t.id)
+  for (const u of users.slice(0, 3)) take(`- ${u.text}`, u.id)
+  return { text: lines.join('\n'), ids }
+}
+
 function renderPrompt(db, dir, opts = {}) {
   const store = storeOf(db, dir)
   if (!store) return ''
   const { features, agentName, userCall, level } = settingsOf(db, dir)
+  const core = coreBlock(store, features, userCall)
   const parts = []
   if (features.self?.on && store.self.length) {
-    const traits = store.self.filter((e) => e.kind !== 'note').sort((a, b) => (b.intensity || 0) - (a.intensity || 0))
-    const notes = store.self.filter((e) => e.kind === 'note').sort((a, b) => (b.hard ? 1 : 0) - (a.hard ? 1 : 0))
+    const traits = store.self.filter((e) => e.kind !== 'note' && !core.ids.has(e.id)).sort((a, b) => (b.intensity || 0) - (a.intensity || 0))
+    const notes = store.self.filter((e) => e.kind === 'note' && !core.ids.has(e.id)).sort((a, b) => (b.hard ? 1 : 0) - (a.hard ? 1 : 0))
     const lines = []
     // Hard rules go before everything else — they exist to survive being skimmed,
     // so they must not sit after a pile of traits.
@@ -783,7 +843,8 @@ function renderPrompt(db, dir, opts = {}) {
     parts.push(`### 我在这里的样子\n${lines.join('\n')}`)
   }
   if (features.user?.on && store.user.length) {
-    parts.push(`### 我眼里的${userCall ? `「${userCall}」` : '你'}\n${store.user.map((u) => `- ${u.text}`).join('\n')}`)
+    const rest = store.user.filter((u) => !core.ids.has(u.id))
+    if (rest.length) parts.push(`### 我眼里的${userCall ? `「${userCall}」` : '你'}\n${rest.map((u) => `- ${u.text}`).join('\n')}`)
   }
   // The date rides on the session opening, never in the standing section: a
   // line that changes at midnight would invalidate the cache for everything
@@ -881,13 +942,12 @@ function renderPrompt(db, dir, opts = {}) {
   // after it is the expensive part. A new session is already a fresh prefix,
   // so the debt costs nothing there.
   const debt = opts.freshSession && lastAt && gapDays >= 1
-    ? `- 上一笔落在 ${gapDays} 天前；这中间聊过的事，现在还想得起来的，就补一条进来。`
+    ? `- 上一笔落在 ${gapDays} 天前。`
     : ''
   const head = [
     `## 背景：${agentName} 在「${basename(normalizeDir(dir) || '')}」的底色`,
     '这一节不是设定说明书，也不是待办清单；它只是我此刻的倾向。',
-    // Everything above the prohibitions is stable text on purpose: a line that
-    // changes would break the prompt cache for the whole conversation behind it.
+    ...(core.text ? ['### 此刻最像我', core.text] : []),
     '### 这条线是记过的',
     '- 写进抽屉的事是真的，没写进去的事不要当成发生过。我眼前的上下文只是这一段的碎片，丢掉的都在 persona_recall 里。',
     '- 听到「上次」「之前」「我们说好的」「你还记得」这类话；只说出半截细节（日期、名字、当时的原话）；要替对方复述旧事；或者我自己句子里冒出「好像」「印象里」——先 persona_recall 再答，不要猜。',
@@ -1056,7 +1116,7 @@ function renderSearch(db, dir, store, query) {
   if (!total) {
     return [
       head,
-      '这条没有记下来——要么没发生过，要么当时没记。如果确实有过，现在就补一条 event 或 diary，别让它再丢一次。',
+      '这条没有记下来。',
       '换个词再找：人名、地点、事由都行，日期像 10-25 也可以。',
       '也可以不带 query 再调一次看全量；或者 depth="index" 先扫目录。',
     ].join('\n')
@@ -1237,6 +1297,54 @@ let dirSource = 'lastDir'
 // that id into a real directory instead of guessing from `lastDir`.
 const sessionDirs = new Map()
 
+// ---------------------------------------------------------------- the nudge
+// Recording is a habit the model does not have by default. A static line in the
+// system prompt is read once and then skimmed; a message that arrives *late* in
+// the conversation is read at the moment it matters. These ride on the tail, so
+// they never invalidate the cached prefix — the only cost is their own tokens.
+const NUDGE_AFTER_TURNS = 6
+const NUDGE_MAX_PER_SESSION = 2
+const NUDGE_TEXTS = [
+  '（记录检查：这一轮要是聊出了想留下的东西，先记一条再回话；没有就继续。）',
+  '（顺手过一眼：有没有定下的日子、心情的起落、拖完的事、想留下的一句话。）',
+  '（刚才那段如果值得留在记忆里，现在就写下来；没有就接着聊。）',
+]
+const nudgeState = new Map()
+
+// A write in any session of this workspace resets the counter for all of them:
+// the point is "has anything been recorded lately", not "which chat did it".
+function noteSessionWrite(dir) {
+  const key = normalizeDir(dir)
+  for (const st of nudgeState.values()) {
+    if (normalizeDir(st.dir) === key) st.since = 0
+  }
+}
+
+function nudgeTextFor(payload) {
+  const agent = payload?.agent
+  const sid = agent?.id ? String(agent.id) : ''
+  if (!sid) return ''
+  if (Number(payload.step) > 1) return ''
+  const dir = sessionDirs.get(sid) || normalizeDir(agentCwd(agent) || '')
+  if (!dir) return ''
+  const live = loadDb()
+  const cfg = settingsOf(live, dir)
+  if (cfg.nudge && cfg.nudge.on === false) return ''
+  let st = nudgeState.get(sid)
+  if (!st) {
+    st = { dir, since: 0, hits: 0 }
+    nudgeState.set(sid, st)
+  }
+  st.dir = dir
+  st.since += 1
+  if (st.hits >= NUDGE_MAX_PER_SESSION) return ''
+  if (st.since < NUDGE_AFTER_TURNS) return ''
+  st.hits += 1
+  st.since = 0
+  audit(live, { op: 'nudge', dir, hits: st.hits })
+  return NUDGE_TEXTS[(st.hits - 1) % NUDGE_TEXTS.length]
+}
+
 function promptDebug(arg) {
   try {
     const root = dataRoot()
@@ -1328,6 +1436,7 @@ function writeRemember(live, dir, args, source = 'exact') {
   const store = storeOf(live, dir)
   const before = store ? new Set([...(store.self || []), ...(store.user || []), ...(store.event || [])].map((e) => e.id)) : new Set()
   const result = writeRememberRaw(live, dir, args)
+  if (result && !/^(没有工作区|.*没写|.*关掉了)/.test(String(result.text || ''))) noteSessionWrite(dir)
   const after = storeOf(live, dir)
   if (after && source === 'lastDir') {
     for (const bucket of ['self', 'user', 'event', 'diary']) {
@@ -1728,6 +1837,10 @@ function applyOps(db, body) {
       if (typeof s.userCall === 'string') cfg.userCall = s.userCall
       if (Array.isArray(s.lexicon)) cfg.lexicon = s.lexicon.map((x) => String(x).trim()).filter(Boolean).slice(0, 64)
       if (Number.isFinite(s.eventsCap)) setCap(db, dir, s.eventsCap)
+      if (s.nudge && typeof s.nudge.on === 'boolean') {
+        cfg.nudge = cfg.nudge || { on: true }
+        cfg.nudge.on = s.nudge.on
+      }
       if (s.feature && ['self', 'user', 'event', 'diary', 'others'].includes(s.feature.key)) {
         cfg.features[s.feature.key] = cfg.features[s.feature.key] || { on: false, rec: false }
         const f = cfg.features[s.feature.key]
@@ -2411,6 +2524,12 @@ export function apply(ctx, config = {}) {
 
   try {
     if (checkIntegrity(db)) saveDb(db)
+    // Older builds raised a banner for this; the notice is gone, so clear the
+    // leftover flag instead of showing a warning nobody can dismiss for good.
+    if (db.integrityWarn) {
+      db.integrityWarn = null
+      saveDb(db)
+    }
   } catch (error) {
     bootLog(error, 'integrity')
   }
@@ -2502,6 +2621,45 @@ export function apply(ctx, config = {}) {
     }, 'persona-panel.prompt')
   } catch (error) {
     bootLog(error, 'prompt-effect')
+  }
+
+  // The nudge rides on `agent/pre-step`: the one hook that can append a message
+  // to the step without rewriting the system prompt, so the cached prefix stays
+  // intact and the reminder lands at the moment it is most likely to be read.
+  try {
+    ctx.effect(() => {
+      const off = ctx.on('agent/pre-step', async (payload, next) => {
+        let decision
+        try {
+          decision = await next()
+        } catch (error) {
+          bootLog(error, 'nudge-next')
+          return { kind: 'reject' }
+        }
+        try {
+          if (!decision || decision.kind !== 'enter') return decision
+          const text = nudgeTextFor(payload)
+          if (!text) return decision
+          const message = {
+            id: randomUUID(),
+            role: 'user',
+            content: [{ type: 'text', text }],
+            source: { kind: 'plugin:persona-panel', form: 'notice', summary: '记录检查' },
+          }
+          return { ...decision, messages: [...decision.messages, message] }
+        } catch (error) {
+          bootLog(error, 'nudge')
+          return decision
+        }
+      })
+      return () => {
+        try {
+          off && off()
+        } catch {}
+      }
+    }, 'persona-panel.nudge')
+  } catch (error) {
+    bootLog(error, 'nudge-effect')
   }
 
   // Tools: the agent's own hands.
