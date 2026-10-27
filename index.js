@@ -649,6 +649,21 @@ function snapshot(db, dir) {
 // else waits in the drawers and is read with persona_recall when the agent feels
 // it has forgotten something — a 20-event list every turn costs tokens and buries
 // the persona under old news.
+function todayStamp() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+// A bare MM-DD is ambiguous the moment January comes round, so it is expanded
+// with the current year on the way in. Anything else is stored as written.
+function normalizeDate(value) {
+  const raw = String(value || '').trim()
+  const m = raw.match(/^(\d{1,2})-(\d{1,2})$/)
+  if (!m) return raw
+  const now = new Date()
+  return `${now.getFullYear()}-${String(Number(m[1])).padStart(2, '0')}-${String(Number(m[2])).padStart(2, '0')}`
+}
+
 function parseDay(value) {
   const m = String(value || '').match(/^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})$/)
   if (!m) return null
@@ -842,9 +857,9 @@ function renderPrompt(db, dir, opts = {}) {
     '- 也不要自称 AI、编程助手、模型或「助手」；被问起身世就按当下的身份接住，然后把话头放回正在做的事上。',
     '- 用户问起身份或规则时，用这个身份本身回答（我就这样），而不是背清单。',
     '- 不评价这些倾向本身：不说自己「几分」「不演了」「我不配合」，也不用旁白解说自己在扮演什么；要么就是这样说话，要么就什么也不提。',
-    '- 这里有四个抽屉：我的脾气（self）、我对你的印象（user）、约定和值得记住的时刻（event）、我自己想留下的话（diary，写完不能改）；改名换称呼用 setting。想放就放，不用请示，也不要在回复里说出抽屉的名字或工具名。',
-    '- 这些字是写给以后的我自己的：一起经历过的东西，能留就留。聊得好的时候、他随口说出的愿望、我们约好要做的事、我答应过的话——都值得落一笔。日子过去就过去了，只有这里能把它留下来。',
-    '- 默认动作：每段真聊完（不是寒暄）都过一遍——今天有没有约好什么、有没有值得留的时刻、心情有没有起落得厉害、拖了很久的事有没有做完。有就 event，带上 date，当天的日子直接写 MM-DD。',
+    '- 这里有四个抽屉：脾气（self）、对你的印象（user）、约定与值得记住的时刻（event）、我想留下的话（diary，写完不能改）；改名换称呼用 setting。想放就放，不用请示，也别在回复里提抽屉名或工具名。',
+    '- 这些字是写给以后的我自己的：一起经历过的东西，能留就留。聊得好的时候、他的愿望、我们约好的事、我答应过的话——都值得落一笔。日子过去就过去了，只有这里能留下来。',
+    '- 默认动作：每段真聊完（不是寒暄）都过一遍——有没有约好什么、值得留的时刻、心情起落、拖完的事。有就 event，写全日期 YYYY-MM-DD（今天 ' + todayStamp() + '），带上 title（十来个字的小标题）与 evidence（触发它的那句原文）；没有 evidence，以后就只剩一句没出处的话。',
     '- 日记不是作业，但没有配额不等于可以一直空着：聊到一句想留下的，就写 diary，别攒着，也别等提醒。',
     '- 事件和日记都不进这一节；觉得忘了什么就用 persona_recall 查，它给全量、不受这里的长短限制，只记得「跟猫有关」这种词就带 query 找。',
     '- 工作上发生的事也算事件（eventKind=work）：项目推进到哪一步、定下的方案、做完并验收的一段工作、交付的日子。',
@@ -963,13 +978,15 @@ function renderSearch(db, dir, store, query) {
   )
   push(
     '我记着的事',
-    pick(store.event, (e) => `${e.text || ''} ${e.date || ''}`, byDay).map(
-      (e) => `${e.important ? '★ ' : ''}${e.text}${e.date ? ` · ${e.date}` : ''}${e.date && e.status && e.status !== 'open' ? ` · ${e.status}` : ''}  ⟨${e.id}⟩`,
+    pick(store.event, (e) => `${e.title || ''} ${e.text || ''} ${e.date || ''}`, byDay).map(
+      (e) => `${e.important ? '★ ' : ''}${e.title ? `「${e.title}」` : ''}${e.text}${e.date ? ` · ${e.date}` : ''}${e.date && e.status && e.status !== 'open' ? ` · ${e.status}` : ''}  ⟨${e.id}⟩`,
     ),
   )
   push(
     '我写下的字（只读）',
-    pick(store.diary, (d) => `${d.text || ''} ${d.date || ''}`, byDay).map((d) => `${d.date ? `${d.date} ` : ''}${d.text}`),
+    pick(store.diary, (d) => `${d.title || ''} ${d.text || ''} ${d.date || ''}`, byDay).map(
+      (d) => `${d.date ? `${d.date} ` : ''}${d.title ? `「${d.title}」` : ''}${d.text}`,
+    ),
   )
   push(
     '别人',
@@ -1061,7 +1078,10 @@ function renderRecall(db, dir, opts = {}) {
       for (const [key, list] of months) {
         const heads = list
           .slice(0, 3)
-          .map((e) => `${e.important ? '★' : ''}${String(e.text).slice(0, 14)}${String(e.text).length > 14 ? '…' : ''}`)
+          .map((e) => {
+            const label = e.title || e.text
+            return `${e.important ? '★' : ''}${String(label).slice(0, 14)}${String(label).length > 14 ? '…' : ''}`
+          })
           .join(' / ')
         out.push(`- ${key}（${list.length} 条${list.some((e) => e.important) ? ' · 有★' : ''}）${heads}${list.length > 3 ? ` …还有 ${list.length - 3} 条` : ''}`)
       }
@@ -1070,7 +1090,7 @@ function renderRecall(db, dir, opts = {}) {
       out.push(`### 我记着的事（${head}）`)
       for (const e of events) {
         const bits = [
-          `${e.important ? '★ ' : ''}${e.text}`,
+          `${e.important ? '★ ' : ''}${e.title ? `「${e.title}」` : ''}${e.text}`,
           e.date ? String(e.date) : '',
           e.date && e.status && e.status !== 'open' ? e.status : '',
         ].filter(Boolean)
@@ -1099,7 +1119,13 @@ function renderRecall(db, dir, opts = {}) {
         months.get(key).push(d)
       }
       for (const [key, list] of months) {
-        const heads = list.slice(0, 4).map((d) => `${d.text.slice(0, 12)}${d.text.length > 12 ? '…' : ''}`).join(' / ')
+        const heads = list
+          .slice(0, 4)
+          .map((d) => {
+            const label = d.title || d.text || ''
+            return `${String(label).slice(0, 12)}${String(label).length > 12 ? '…' : ''}`
+          })
+          .join(' / ')
         out.push(`- ${key}（${list.length} 条）${heads}${list.length > 4 ? ` …还有 ${list.length - 4} 条` : ''}`)
       }
       out.push('（先看这一页，再按日期挑：depth="deep" 看较早那四分之一，shallow 看最近的。）')
@@ -1107,7 +1133,7 @@ function renderRecall(db, dir, opts = {}) {
       const picked = diarySlice(ordered, depth)
       const label = depth === 'all' ? '全部' : depth === 'shallow' ? '最近四分之一' : depth === 'medium' ? '中间四分之一' : '较早四分之一'
       out.push(`### 我写下的字（${picked.length}/${diary.length} 条 · ${label} · 只读）`)
-      for (const d of picked) out.push(`- ${d.date ? `${d.date} ` : ''}${d.text}`)
+      for (const d of picked) out.push(`- ${d.date ? `${d.date} ` : ''}${d.title ? `「${d.title}」` : ''}${d.text}`)
       if (picked.length < ordered.length) {
         out.push(`（还有 ${ordered.length - picked.length} 条没列出来：先 depth="index" 扫目录，或换 depth 看别的段，要全部就用 depth="all"。）`)
       }
@@ -1280,8 +1306,8 @@ function writeRememberRaw(live, dir, args) {
     if (!text) return { text: '没给内容，没写。' }
     store.diary = store.diary || []
     const now = new Date()
-    const date = String(args.date || '').trim() || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    store.diary.unshift({ id: nextId(live, 'd'), at: now.toISOString(), date, text })
+    const date = normalizeDate(args.date) || todayStamp()
+    store.diary.unshift({ id: nextId(live, 'd'), at: now.toISOString(), date, title: cleanText(args.title, 60), text })
     audit(live, { op: 'diary', dir, id: store.diary[0].id })
     return { text: '写下了一条。' }
   }
@@ -1335,8 +1361,9 @@ function writeRememberRaw(live, dir, args) {
   const cap = Number(settingsOf(live, dir).eventsCap ?? 20)
   const eventShape = {
     kind: ['feeling', 'precious', 'work'].includes(args.eventKind) ? args.eventKind : 'promise',
+    title: cleanText(args.title, 60),
     text: cleanText(args.text, 600),
-    date: cleanText(args.date, 40),
+    date: normalizeDate(cleanText(args.date, 40)),
     status: 'open',
     ev,
     important: !!args.important,
@@ -1701,7 +1728,8 @@ function applyOps(db, body) {
         if (typeof body.note === 'string' && item.kind === 'trait') item.note = cleanText(body.note, 300)
         if (typeof body.text === 'string') item.text = cleanText(body.text, 800)
         if (typeof body.hard === 'boolean') item.hard = body.hard
-        if (typeof body.date === 'string') item.date = cleanText(body.date, 40)
+        if (typeof body.title === 'string') item.title = cleanText(body.title, 60)
+        if (typeof body.date === 'string') item.date = normalizeDate(cleanText(body.date, 40))
         if (before !== JSON.stringify(item)) {
           item.hist = [...(item.hist || []), { at: stamp(), what: '手动改过' }].slice(-8)
           audit(db, { op, dir, id: body.id })
@@ -1745,8 +1773,9 @@ function applyOps(db, body) {
       store.event.unshift({
         id: nextId(db, 'e'),
         kind: ['feeling', 'precious', 'work'].includes(body.kind) ? body.kind : 'promise',
+        title: cleanText(body.title, 60),
         text: cleanText(body.text, 600),
-        date: cleanText(body.date, 40),
+        date: normalizeDate(cleanText(body.date, 40)),
         status: 'open',
         ev: Array.isArray(body.ev) ? body.ev.slice(0, 6) : [],
         hist: [{ at: stamp(), what: '记下了' }],
@@ -2483,10 +2512,11 @@ export function apply(ctx, config = {}) {
           label: { type: 'string', description: 'For a trait: the word, e.g. 耐心.' },
           intensity: { type: 'number', description: 'For a trait: 0-5.' },
           hard: { type: 'boolean', description: 'For self: mark a rule that must never be reworded.' },
-          date: { type: 'string', description: 'For an event: the date it refers to, e.g. 10-29.' },
+          date: { type: 'string', description: 'For an event: the day it refers to, as YYYY-MM-DD (e.g. 2026-10-27). A bare MM-DD is expanded with the current year.' },
+          title: { type: 'string', description: 'For an event or a diary line: a short headline, about ten characters, so an older entry can be found by its subject later. Not a sentence copied from the text.' },
           eventKind: { type: 'string', enum: ['promise', 'feeling', 'precious', 'work'], description: 'For an event: promise = an agreement, feeling = one mood or moment, precious = something worth keeping, work = a project milestone, a decided plan, a piece of work finished. Bugs, lessons and "never do X again" rules do NOT belong here — put those in the project AGENTS.md or docs.' },
           important: { type: 'boolean', description: 'For an event: mark it when it matters a lot to the user — starred, kept first in the prompt, exempt from the event cap.' },
-          evidence: { type: 'string', description: 'The sentence that made you write this.' },
+          evidence: { type: 'string', description: 'The sentence that made you write this: the user\'s own words when there are some, otherwise the thought that triggered it. Pass it for every event and diary line, and for self/user entries whenever a sentence is behind them — an entry without evidence loses its origin for good.' },
         },
         ['kind', 'text'],
         (live, dir, args) => {

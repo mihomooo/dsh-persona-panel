@@ -16,6 +16,36 @@ window.__ModuleLoader__.load({
     const TYPES = ['self', 'user', 'event', 'diary']
     const TITLES = { self: '人设卡', user: '画像', event: '事件', diary: '日记' }
 
+    // Old entries were written as a bare MM-DD (the prompt used to ask for
+    // that). The row still has the moment it was written in `at`, so borrow
+    // the year from there instead of showing a date that looks like this year
+    // when it is not.
+    function dateWithYear(item) {
+      const date = String((item && item.date) || '').trim()
+      if (!date) return ''
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
+      const at = item && item.at
+      const year = at && /^\d{4}/.test(String(at)) ? String(at).slice(0, 4) : ''
+      if (/^\d{1,2}-\d{1,2}$/.test(date) && year) {
+        const [m, d] = date.split('-')
+        return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      }
+      return date
+    }
+
+    // Why an entry exists, said plainly for each kind. "没有留下" used to be
+    // the answer for every entry the model forgot to annotate, diary included,
+    // which read like the plugin lost the quote.
+    function provenanceOf(item, cur) {
+      const ev = (item && item.ev) || []
+      if (ev.length) return `原话：${ev[0]}`
+      if (cur === 'diary') return '这里没有原话——这段是它自己写下的，不是谁说的。'
+      if (cur === 'event') return '写的时候没有留下原话；正文就是它记下的那句。'
+      if (item && item.kind === 'trait') return '不是某一句话说出来的：相处里反复见到，才算一条。'
+      if (cur === 'user') return '写的时候没有留下原话。'
+      return '写的时候没有留下原话；正文就是它记下的那句。'
+    }
+
     // The host mints a token per boot; every write has to carry it back.
     let TOKEN = ''
 
@@ -564,6 +594,7 @@ window.__ModuleLoader__.load({
                         h(
                           'div',
                           { className: 'pp-txt' },
+                          item.title ? h('strong', { style: { marginRight: 6 } }, item.title) : null,
                           item.kind === 'trait' ? item.label : item.text,
                           item.important ? h('span', { className: 'pp-tag', style: { marginLeft: 6, opacity: 0.9 }, title: '标为重要：注入时排最前，不受条数上限限制' }, '★ 重要') : null,
                           item.kind === 'work' ? h('span', { className: 'pp-tag', style: { marginLeft: 6, opacity: 0.9 }, title: '工程事件：项目推进、定下的方案、做完的一段工作' }, '工程') : null,
@@ -585,8 +616,8 @@ window.__ModuleLoader__.load({
                           'div',
                           { className: 'pp-mini' },
                           cur === 'diary'
-                            ? `自述${item.date ? ` · ${item.date}` : ''}`
-                            : `${item.ev && item.ev.length ? `来源：${item.ev[0]}` : item.kind === 'trait' ? '来源：日常相处里长出来' : '来源：对话'}${item.date ? ` · ${item.date}` : ''}`,
+                            ? `自述${dateWithYear(item) ? ` · ${dateWithYear(item)}` : ''}`
+                            : `${item.ev && item.ev.length ? `来源：${item.ev[0]}` : item.kind === 'trait' ? '来源：日常相处里长出来' : '来源：对话'}${dateWithYear(item) ? ` · ${dateWithYear(item)}` : ''}`,
                         ),
                       ),
                       cur === 'diary'
@@ -642,7 +673,10 @@ window.__ModuleLoader__.load({
                   'div',
                   null,
                   h('h4', null, '这条是怎么来的'),
-                  h('div', { className: 'pp-mini' }, selItem.ev && selItem.ev.length ? `原话：${selItem.ev[0]}` : '原话：没有留下'),
+                  selItem.title || dateWithYear(selItem)
+                    ? h('div', { className: 'pp-mini' }, [selItem.title, dateWithYear(selItem)].filter(Boolean).join(' · '))
+                    : null,
+                  h('div', { className: 'pp-mini' }, provenanceOf(selItem, cur)),
                   h('div', { className: 'pp-mini' }, `挡位：${data.settings.level === 'manual' ? '全手动' : data.settings.level === 'half' ? '半自动' : data.settings.level === 'active' ? '主动' : '全自动'}`),
                   selItem.kind === 'trait' ? h('div', { className: 'pp-mini' }, `强度：${selItem.intensity}/5`) : null,
                   h(
@@ -811,11 +845,16 @@ window.__ModuleLoader__.load({
       const [note, setNote] = useState(item?.note || '')
       const [text, setText] = useState(item?.text || '')
       const [hard, setHard] = useState(!!item?.hard)
+      const [title, setTitle] = useState(item?.title || '')
+      const [date, setDate] = useState(item?.date || '')
+      // An event is the only kind that carries a headline and a date: the two
+      // fields that make an old entry findable by subject and by day.
+      const isEvent = modal.type === 'event' && (!item || item.kind !== 'trait')
       const lexicon = data.settings.lexicon || []
 
       const save = async () => {
         if (item) {
-          await send({ op: 'updateEntry', id: item.id, label, intensity, note, text, hard })
+          await send({ op: 'updateEntry', id: item.id, label, intensity, note, text, hard, ...(isEvent ? { title, date } : {}) })
         } else if (kind === 'trait') {
           await send({ op: 'addTrait', label, intensity, note })
         } else {
@@ -871,14 +910,35 @@ window.__ModuleLoader__.load({
               )
             : h(
                 'div',
-                { className: 'pp-field' },
-                h('label', null, '写一条'),
-                h('textarea', { value: text, onChange: (e) => setText(e.target.value) }),
+                null,
+                isEvent
+                  ? h(
+                      'div',
+                      { className: 'pp-field' },
+                      h('label', null, '小标题'),
+                      h('input', { type: 'text', value: title, onChange: (e) => setTitle(e.target.value), placeholder: '十来个字，以后靠它翻' }),
+                    )
+                  : null,
+                isEvent
+                  ? h(
+                      'div',
+                      { className: 'pp-field' },
+                      h('label', null, '日期'),
+                      h('input', { type: 'text', value: date, onChange: (e) => setDate(e.target.value), placeholder: '2026-10-27' }),
+                      h('div', { className: 'pp-hint' }, '写全 YYYY-MM-DD；只写月日的话，会按今年补上。'),
+                    )
+                  : null,
                 h(
-                  'label',
-                  { className: 'pp-row', style: { gap: 6 } },
-                  h('input', { type: 'checkbox', checked: hard, onChange: (e) => setHard(e.target.checked) }),
-                  h('span', { className: 'pp-hint' }, '标为硬约束（注入时排在人格补充最前面，不参与归纳）'),
+                  'div',
+                  { className: 'pp-field' },
+                  h('label', null, '写一条'),
+                  h('textarea', { value: text, onChange: (e) => setText(e.target.value) }),
+                  h(
+                    'label',
+                    { className: 'pp-row', style: { gap: 6 } },
+                    h('input', { type: 'checkbox', checked: hard, onChange: (e) => setHard(e.target.checked) }),
+                    h('span', { className: 'pp-hint' }, '标为硬约束（注入时排在人格补充最前面，不参与归纳）'),
+                  ),
                 ),
               ),
           h(

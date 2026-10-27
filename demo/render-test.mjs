@@ -68,7 +68,13 @@ const fixture = {
       { id: 'n1', kind: 'note', text: '绝不替我做主', hard: true, ev: [], hist: [] },
     ],
     user: [{ id: 'u1', text: '喜欢深夜写代码', ev: [] }],
-    event: [{ id: 'e1', kind: 'feeling', text: '完成了一件做了很久的事', date: '今天', status: 'open', important: true, ev: [], hist: [] }],
+    event: [
+      { id: 'e1', kind: 'feeling', text: '完成了一件做了很久的事', title: '收尾', date: '2026-10-27', status: 'open', important: true, ev: [], hist: [] },
+      // 老条目：只有月日，没有小标题，也没有原话——面板要能从 at 补年份，
+      // 并且不能把「没留原话」说成「没有留下」。
+      { id: 'e2', kind: 'promise', text: '说好十一月去看海', date: '10-25', at: '2025-10-25T12:00:00.000Z', status: 'open', ev: [], hist: [] },
+    ],
+    diary: [{ id: 'd1', date: '2026-10-26', title: '夜里的事', text: '今天把插件发出去了', ev: [], hist: [] }],
     pending: [
       { id: 'p1', kind: 'capFull', text: '第四条事件', date: '', eventKind: 'feeling', important: false, capCount: 20, capLimit: 20, ev: [], hist: [] },
     ],
@@ -423,6 +429,58 @@ for (const [name, def] of renderTargets) {
     }
   } else {
     ok('profiles panel lists both cards', false, 'panel missing')
+  }
+}
+
+// ---- 小标题、年份、以及「原话」到底怎么写 -----------------------------------
+{
+  const panelDef = (slots['settings.section'] || [])[0]
+  const Panel = panelDef && (typeof panelDef.render === 'function' ? panelDef.render : panelDef.component || panelDef.Component)
+  const settle = async () => {
+    for (let pass = 0; pass < 8; pass++) { dirty = false; flatten(createElement(Panel, {}), []) }
+    for (const fn of effects.splice(0)) { try { await fn() } catch {} }
+    await new Promise((r) => setTimeout(r, 30))
+    let nodes = []
+    for (let pass = 0; pass < 10; pass++) { dirty = false; nodes = expand(createElement(Panel, {})) }
+    return nodes
+  }
+  if (typeof Panel === 'function') {
+    bags.delete(Panel.name || 'anon')
+    fixture.firstRun = false
+    fixture.dir = 'C:\\Users\\me\\Desktop\\ds'
+    let nodes = await settle()
+
+    const tabTo = async (label) => {
+      const tab = findNode(nodes, (n) => n.type === 'button' && String((n.children || []).join('')) === label)
+      if (tab) tab.props.onClick({ stopPropagation() {} })
+      nodes = await settle()
+      return !!tab
+    }
+    const clickItem = async (id) => {
+      const row = findNode(nodes, (n) => n.props && n.props.className === 'pp-item' && n.props.key === id)
+      if (row) row.props.onClick({ stopPropagation() {} })
+      nodes = await settle()
+      return !!row
+    }
+
+    await tabTo('事件')
+    const eventText = textOf(nodes)
+    ok('an event row wears its headline', eventText.includes('收尾'), eventText.slice(0, 200))
+    ok('a dated event shows the year', eventText.includes('2026-10-27'), eventText.slice(0, 240))
+    ok('an old month-day borrows the year from when it was written', eventText.includes('2025-10-25'), eventText.slice(0, 240))
+
+    await clickItem('e2')
+    const eventDrawer = textOf(nodes)
+    ok('an event without a quote says so plainly', eventDrawer.includes('写的时候没有留下原话'), eventDrawer.slice(-240))
+    ok('…and never claims nothing was left', !eventDrawer.includes('原话：没有留下'), eventDrawer.slice(-240))
+
+    await tabTo('日记')
+    const diaryText = textOf(nodes)
+    ok('a diary row wears its headline', diaryText.includes('夜里的事'), diaryText.slice(0, 200))
+    await clickItem('d1')
+    const diaryDrawer = textOf(nodes)
+    ok('a diary says it was written, not quoted', diaryDrawer.includes('它自己写下的'), diaryDrawer.slice(-240))
+    ok('a diary never says no quote was left', !diaryDrawer.includes('没有留下'), diaryDrawer.slice(-240))
   }
 }
 
