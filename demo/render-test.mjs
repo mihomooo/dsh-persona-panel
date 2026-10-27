@@ -369,6 +369,24 @@ for (const [name, def] of renderTargets) {
       if (back) back.props.onChange({ target: { checked: true } })
       nodes = await settle()
     }
+    // All four off: the panel must stop drawing rows entirely, not just hide
+    // the tab above them.
+    for (const kind of ['self', 'user', 'event', 'diary']) {
+      const box = findNode(nodes, (n) => n.type === 'input' && n.props && n.props.key === `${kind}-on`)
+      if (box && box.props.checked) {
+        box.props.onChange({ target: { checked: false } })
+        nodes = await settle()
+      }
+    }
+    ok('all four off says so', textOf(nodes).includes('四类都关着'), textOf(nodes).slice(0, 120))
+    ok('all four off leaves no rows behind', !textOf(nodes).includes('耐心') && !textOf(nodes).includes('喜欢深夜写代码'), textOf(nodes).slice(0, 200))
+    for (const kind of ['self', 'user', 'event', 'diary']) {
+      const box = findNode(nodes, (n) => n.type === 'input' && n.props && n.props.key === `${kind}-on`)
+      if (box && !box.props.checked) {
+        box.props.onChange({ target: { checked: true } })
+        nodes = await settle()
+      }
+    }
     const closeSettings = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('关闭'))
     if (closeSettings) closeSettings.props.onClick({ stopPropagation() {} })
     nodes = await settle()

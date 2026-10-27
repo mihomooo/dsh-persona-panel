@@ -336,8 +336,6 @@ window.__ModuleLoader__.load({
       }, [dir, selfCount])
 
       const store = data?.store || { self: [], user: [], event: [], diary: [], pending: [] }
-      const list = store[tab] || []
-      const selItem = list.find((x) => x.id === sel) || null
 
       const send = async (body) => {
         setBusy(true)
@@ -368,6 +366,11 @@ window.__ModuleLoader__.load({
       const tabOn = (k) => features[k]?.on !== false
       const tabs = TYPES.filter(tabOn)
       const cur = tabs.includes(tab) ? tab : tabs[0] || 'self'
+      // Rows come from the tab actually being shown, never from the stale
+      // `tab` state: turning a kind off used to leave its rows on screen with
+      // no tab above them.
+      const list = tabs.length ? store[cur] || [] : []
+      const selItem = list.find((x) => x.id === sel) || null
 
       const openEdit = (item) => {
         setModal({ kind: 'edit', item: item || null, type: cur })
@@ -384,7 +387,7 @@ window.__ModuleLoader__.load({
             'div',
             null,
             h('div', { className: 'pp-title' }, '记忆'),
-            h('div', { className: 'pp-sub' }, tabs.length ? '每一条都记着它是怎么来的。改坏了可以悔一步。' : '这个工作区三类都关着，所以这里没有内容。'),
+            h('div', { className: 'pp-sub' }, tabs.length ? '每一条都记着它是怎么来的。改坏了可以悔一步。' : '这个工作区四类都关着，所以这里没有内容。'),
           ),
           h(
             'div',
@@ -608,19 +611,21 @@ window.__ModuleLoader__.load({
                             }),
                     ),
                   )
-                : h(
-                    'div',
-                    { className: 'pp-empty' },
-                    cur === 'self'
-                      ? '人设卡还是空的。它不靠你填问卷，靠相处慢慢长——同一件事出现两三次，我才会写一条。'
-                      : cur === 'user'
-                        ? '我对你还没有印象。多聊几次再总结，写下来的每一条你都能删。'
-                        : cur === 'diary'
-                          ? '还没有日记。它想留下什么就写一条，写完不能改。'
-                          : '还没有事件。承诺、约定、值得留下的时刻，会落在这里。',
-                  ),
+                : !tabs.length
+                  ? h('div', { className: 'pp-empty' }, '这个工作区四类都关着。去设置里打开一个，这里才有内容。')
+                  : h(
+                      'div',
+                      { className: 'pp-empty' },
+                      cur === 'self'
+                        ? '人设卡还是空的。它不靠你填问卷，靠相处慢慢长——同一件事出现两三次，我才会写一条。'
+                        : cur === 'user'
+                          ? '我对你还没有印象。多聊几次再总结，写下来的每一条你都能删。'
+                          : cur === 'diary'
+                            ? '还没有日记。它想留下什么就写一条，写完不能改。'
+                            : '还没有事件。承诺、约定、值得留下的时刻，会落在这里。',
+                    ),
             ),
-            cur === 'user' ? h(Others, { data, send, onSettings: () => setModal({ kind: 'settings' }) }) : null,
+            tabs.length && cur === 'user' ? h(Others, { data, send, onSettings: () => setModal({ kind: 'settings' }) }) : null,
             h(
               'div',
               { className: 'pp-foot' },
