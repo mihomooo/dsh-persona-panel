@@ -69,7 +69,8 @@ ok('stays quiet for five turns', quiet.every((n) => n === 0), JSON.stringify(qui
 const sixth = await step('home-s1', 6)
 ok('nudges on the sixth turn', injected(sixth).length === 1)
 ok('the message is marked as a plugin notice', injected(sixth)[0]?.source?.form === 'notice')
-ok('the message has text', (injected(sixth)[0]?.content?.[0]?.text || '').includes('记录'))
+ok('the message has text', /记住|留下|记一条/.test(injected(sixth)[0]?.content?.[0]?.text || ''))
+ok('the message asks instead of ordering', /？/.test(injected(sixth)[0]?.content?.[0]?.text || ''))
 
 // Only the first step of a turn: step 2 must never carry it.
 const secondStep = await step('home-s1', 7, 2)
@@ -83,8 +84,8 @@ ok('a write clears the counter', afterWrite.every((n) => n === 0), JSON.stringif
 const again = await step('home-s1', 12)
 ok('nudges again after another six turns', injected(again).length === 1)
 const afterCap = []
-for (let turn = 13; turn <= 20; turn += 1) afterCap.push((await step('home-s1', turn)).messages.length)
-ok('never more than twice per session', afterCap.every((n) => n === 0), JSON.stringify(afterCap))
+for (let turn = 13; turn <= 24; turn += 1) afterCap.push((await step('home-s1', turn)).messages.length)
+ok('one last nudge, then silence: three per session', afterCap.filter((n) => n === 1).length === 1 && afterCap.indexOf(1) === 5, JSON.stringify(afterCap))
 
 // Switched off: a fresh session stays silent even after many turns.
 await api({ op: 'settings', settings: { nudge: { on: false } } })

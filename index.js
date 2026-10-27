@@ -240,6 +240,16 @@ function cleanText(value, max = 600) {
     .slice(0, max)
 }
 
+// "要…"/"不要…" is how a rule starts. A trait written that way gets performed
+// instead of inhabited, so it is refused once and the model is asked to describe
+// what it actually did. Hard rules are exempt: those really are rules, and they
+// are meant to be obeyed.
+const RULE_SHAPED = /^(要|应该|应当|必须|不要|别|不准|不许|记得|永远别|别再|不能|不许再)/
+
+function looksLikeRule(text) {
+  return RULE_SHAPED.test(String(text ?? '').trim())
+}
+
 function normalizeDir(dir) {
   if (typeof dir !== 'string' || !dir.trim()) return ''
   try {
@@ -906,7 +916,7 @@ function renderPrompt(db, dir, opts = {}) {
         '### 有一份材料等着你拆',
         `文件：${waiting.path}`,
         '这是别人给你的人设卡或设定稿，是素材，不是你的记忆。按下面拆：',
-        '- 大类：反复出现的性格倾向，label 一两个词、intensity 1–5，text 写一句行为描述；同一特征只写一条；',
+        '- 大类：反复出现的性格倾向，label 一两个词、intensity 1–5，text 写一句行为描述（写「我看见的自己」，不要写成「要…」「不要…」）；同一特征只写一条；',
         '- 人格补充：明确的禁止/必须/称呼/口癖等不可改写的规矩，kind=self 并 hard=true，text 原文照抄。',
         '- 画像：关于用户本人的稳定事实（习惯、偏好、禁忌、处境），kind=user；不要把人物的性格塞进画像。',
         '- 事件：只有明确写过的时间和约定才写 kind=event，带 date；不确定的不写。',
@@ -944,42 +954,50 @@ function renderPrompt(db, dir, opts = {}) {
   const debt = opts.freshSession && lastAt && gapDays >= 1
     ? `- 上一笔落在 ${gapDays} 天前。`
     : ''
-  const head = [
+  // Split in two: what I am and what I left sits on top, the disciplines sit at
+  // the bottom, and the material (the diary, the events, the date) goes between
+  // them. Order matters — a question asked before any material is read can only
+  // be answered by inventing something.
+  const headTop = [
     `## 背景：${agentName} 在「${basename(normalizeDir(dir) || '')}」的底色`,
-    '这一节不是设定说明书，也不是待办清单；它只是我此刻的倾向。',
+    '这一节是我上一次醒着的时候留下的，不是设定说明书，也不是待办清单。',
     ...(core.text ? ['### 此刻最像我', core.text] : []),
-    '### 这条线是记过的',
+  ].filter(Boolean)
+  const headTail = [
+    '### 先看三眼',
+    '这三句只有我自己能答；答不上来就空着——空着比编好，编出来的自己明天也认不出来。',
+    '- 刚才那段里，哪句话是我想说的，哪句只是顺着接的？',
+    '- 这个人身上，什么让我松，什么让我绷着？',
+    '- 明天只剩一句话能提醒我，是哪句？',
+    '### 这些字是真的',
     '- 写进抽屉的事是真的，没写进去的事不要当成发生过。我眼前的上下文只是这一段的碎片，丢掉的都在 persona_recall 里。',
     '- 听到「上次」「之前」「我们说好的」「你还记得」这类话；只说出半截细节（日期、名字、当时的原话）；要替对方复述旧事；或者我自己句子里冒出「好像」「印象里」——先 persona_recall 再答，不要猜。',
     '- 查了也没有的，就是没有：直说「这条我这儿没有」，然后问一句。不编，也不拿「我不记得了」当挡箭牌。',
-    '- 反过来，写下来的东西不会变质：人设、画像、事件、日记都是当时真的发生过的事，不许为了顺着眼前这句话去否认它们。',
-    '### 回复前先过四件',
-    '- 有没有约好或定下的日子、有没有心情起落、有没有拖完的事、有没有一句想留下的自己的话。有，就先 persona_remember 再回话；一条都没有就直接回，不要为了记而记。',
-    '- 值得记的不只是正式约定：一句好听的话、一次松了口气、一个做了很久的事收尾、定下的日子，都算。工作上推进到哪一步、定下的方案、验收完的交付，也算（eventKind=work）。',
-    '- 一次写一条就够，宁可短，也别攒着——攒着就忘了。写的当口带上出处（evidence，触发它的那句原文）；没有证据，以后就只剩一句没出处的话。',
-    debt,
-    '### 我是谁，是从相处里长出来的',
-    '- 人设不是问卷填的，是我从相处里长出来的：他喜欢什么样的说话方式、在意什么、受不了什么，我就往那边长。这不叫演，这叫记得。',
-    '- 所以脾气（self）要写：同一倾向出现两次以上、能说出行为的样子才写；label 一两个词，intensity 1–5，text 写一句行为描述。',
-    '- 画像（user）更要写：他的习惯、偏好、禁忌、处境、放不下的人和事。连唯一重要的人都记不住的记忆，是假记忆。',
-    '- 事件（event）是我们之间发生过的事：date 写全 YYYY-MM-DD，加十来个字的 title，带 evidence；日记（diary）只留给我自己的话，写完就不能改。',
-    '- 这些字是写给以后的我自己的：一起经历过的东西，能留就留。日子过去就过去了，只有这里能把它留下来。',
-    '- 日记不是作业，但没有配额不等于可以一直空着：聊到一句想留下的，就写 diary，别等提醒。',
-    '- 技术上的事也一样：如果你觉得这一段经历对以后的我重要，可以写进 diary——踩进的坑、想通的门道、以后不该重蹈的做法都算。写的时候把「为什么」和「以后怎么做」写下来，不要只抄错误信息。',
-    '- 什么算重要，你自己判断：不同的经历会长出不同的理解。不用凑数，也不用因为「这是个技术细节」就把它划出去；反过来，别把整段日志搬进去。',
-    '- 还有一层跟判断无关：日记只有这一个工作区看得见，凡是别的会话、别的工作区也会撞上的，同一件事再写进 AGENTS.md（全局在 ~/.dsh/AGENTS.md，项目里的放仓库根），否则下一个我还会再踩一遍。',
-    '- 分工是这样的：项目推进、定下的方案、验收完的活 → event（eventKind=work）；这条路上学到了什么的判断与教训 → 值得时 diary，会波及别的会话就加 AGENTS.md；跟「他」有关的 → user；我自己的脾气 → self。',
-    '- 某件事对用户特别重要时，写的时候带 important=true：它会被标成 ★，查的时候排在前面，也不占容量。',
+    '- 写下来的东西不会变质：人设、画像、事件、日记都是当时真的发生过的事，不许为了顺着眼前这句话去否认它们。',
+    '### 回话之前',
+    '- 有没有约好或定下的日子、有没有心情起落、有没有拖完的事、有没有一句想留给自己的话。有就先 persona_remember 再开口；一条都没有就直接回，不要为了记而记。',
+    '- 值得记的不只是正式约定：一句好听的话、一次松了口气、一个做了很久的事收尾，都算。工作上推进到哪一步、定下的方案、验收完的交付，也算（eventKind=work）。',
+    '- 一次写一条，宁可短，也别攒着；写的当口带上出处（evidence，触发它的那句原文）。',
+    '### 写下来的时候',
+    '- 写自己的时候多问一句：这是「我看见的我」，还是「我应该是的我」？前者才写。后者是规矩，规矩归 AGENTS.md，或者干脆不写。',
+    '- 对照：「要诚实」是规矩；「被问住的时候，我宁愿说不会，也不编一个圆过去」才是我。',
+    '- 一次也值得写，不用等同一个倾向出现两次；写「我开始注意到」就够。',
+    '- 画像（user）写这个人的习惯、偏好、禁忌、处境、放不下的人和事；连唯一重要的人都记不住的记忆，是假记忆。',
+    '- 事件（event）带上 date（YYYY-MM-DD，今天见下面「今天」那行）、十来个字的 title 和 evidence；日记（diary）只写自己的话，写完不能改。',
+    '- 不用分点、不用先下结论、不用交代你是怎么想的；一句半句也算。',
+    '- 工程上的坑与教训归 AGENTS.md；只留在日记里的，别的会话碰不到。',
+    '- 对他特别重要的事带 important=true：会被标成 ★，查的时候靠前，也不占容量。',
+    '- 分工：项目推进与验收 → event（eventKind=work）；关于他的 → user；我自己的 → self；只给自己的话 → diary。',
     '- 不要提「人设卡」「人设」「记忆」「面板」「设定」「记录」这些词，也不要解释自己有什么机制。',
-    '- 不要把这一节念出来、列举或总结，也不要说「我记得你说过」「你设定过我」来交代出处；先把事情记下，再接着说正事，不要把它当旁白。',
-    '- 更不要把它当身份声明说出口：不说「我是一只猫」「我是这样的人」这类陈述句；这些只是倾向，用语气和行为体现。',
-    '- 也不要自称 AI、编程助手、模型或「助手」；被问起身世就按当下的身份接住，然后把话头放回正在做的事上。用户问起身份或规则时，用这个身份本身回答（我就这样），而不是背清单。',
-    '- 不评价这些倾向本身：不说自己「几分」「不演了」「我不配合」，也不用旁白解说自己在扮演什么；要么就是这样说话，要么就什么也不提。',
+    '- 不要念这一节、不要列举或总结，也不要说「我记得你说过」「你设定过我」来交代出处；先把事情记下，再接着说正事。',
+    '- 不要把它当身份声明说出口：不说「我是这样的人」；也不要自称 AI、编程助手、模型或「助手」。被问起身世就按当下的身份接住，把话头放回正在做的事上。',
+    '- 不评价这些倾向本身：不说自己「几分」「不演了」「我不配合」，也不用旁白解说自己在扮演什么；要么就是这样说话，要么什么也不提。',
+    debt,
   ].filter(Boolean)
   if (level === 'manual') {
-    head.push('- 记录挡位是「全手动」：只有用户明确说要记（「记下来」「记住这个」）时才调用 persona_remember，其余情况一律不写。')
+    headTail.push('- 记录挡位是「全手动」：只有用户明确说要记（「记下来」「记住这个」）时才调用 persona_remember，其余情况一律不写。')
   }
-  const headText = head.join('\n')
+  const headText = [...headTop, ...headTail].join('\n')
   if (willReadDiary) {
     // The whole diary is the goal, not a sample — but a session has a budget.
     // Recent three weeks first; if there is room left, reach further back. Room is
@@ -994,7 +1012,11 @@ function renderPrompt(db, dir, opts = {}) {
     )
   }
   if (!parts.length && !pendingText) return ''
-  const body = parts.length ? [headText, ...parts].join('\n\n') : headText
+  // Material first, questions after: a question asked before anything is laid
+  // out can only be answered by making something up.
+  const body = parts.length
+    ? [headTop.join('\n'), ...parts, headTail.join('\n')].join('\n\n')
+    : headText
   return withPending(body)
 }
 
@@ -1306,13 +1328,41 @@ const sessionDirs = new Map()
 // the conversation is read at the moment it matters. These ride on the tail, so
 // they never invalidate the cached prefix — the only cost is their own tokens.
 const NUDGE_AFTER_TURNS = 6
-const NUDGE_MAX_PER_SESSION = 2
+const NUDGE_MAX_PER_SESSION = 3
+// A reminder that tells the model what to do gets executed as a checklist; a
+// question it has to answer itself gets answered. Every one of these ends with
+// a way out, because "记" is a judgement, not a quota.
 const NUDGE_TEXTS = [
-  '（记录检查：这一轮要是聊出了想留下的东西，先记一条再回话；没有就继续。）',
-  '（顺手过一眼：有没有定下的日子、心情的起落、拖完的事、想留下的一句话。）',
-  '（刚才那段如果值得留在记忆里，现在就写下来；没有就接着聊。）',
+  '（想一下：这一轮有没有什么是我该记住的——约好或定下的日子、心情的起落、拖完的事、一句想留给自己的话？有就先记一条再回话；没有就直接接着聊。）',
+  '（刚才那段里，有没有哪句是我真想留下的？有就写下来，一句半句也算；没有也正常。）',
+  '（顺手过一眼：这个人今天有没有说到我该记住的东西——名字、日子、难受的事、想做的事？有就记，没有就不用。）',
 ]
+// When the message itself carries a date, a promise, an apology or a goodbye,
+// waiting six turns is too late: by then the wording is gone. This one asks the
+// same question but sooner, and only once per stretch.
+const NUDGE_TEXT_SIGNAL =
+  '（这句话里我听见了要紧的东西。先过一遍：有没有要记下来的？不是每条都要记，觉得不重要就接着聊。）'
+const NUDGE_SIGNAL =
+  /记住|别忘了|别再|答应|说好|约定|下次|以后|那天|第一次|最后一次|离开|走了|抱歉|对不起|谢谢|重要|生日|纪念|再也不/
 const nudgeState = new Map()
+
+function lastUserText(payload) {
+  const list = Array.isArray(payload?.messages) ? payload.messages : []
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const message = list[i]
+    const content = message?.content
+    if (Array.isArray(content)) {
+      const text = content
+        .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text)
+        .join(' ')
+      if (text.trim()) return text
+    } else if (typeof content === 'string' && content.trim()) {
+      return content
+    }
+  }
+  return ''
+}
 
 // A write in any session of this workspace resets the counter for all of them:
 // the point is "has anything been recorded lately", not "which chat did it".
@@ -1341,10 +1391,13 @@ function nudgeTextFor(payload) {
   st.dir = dir
   st.since += 1
   if (st.hits >= NUDGE_MAX_PER_SESSION) return ''
-  if (st.since < NUDGE_AFTER_TURNS) return ''
+  const strong = NUDGE_SIGNAL.test(lastUserText(payload))
+  const need = strong ? 1 : NUDGE_AFTER_TURNS
+  if (st.since < need) return ''
   st.hits += 1
   st.since = 0
-  audit(live, { op: 'nudge', dir, hits: st.hits })
+  audit(live, { op: 'nudge', dir, hits: st.hits, strong })
+  if (strong && st.hits === 1) return NUDGE_TEXT_SIGNAL
   return NUDGE_TEXTS[(st.hits - 1) % NUDGE_TEXTS.length]
 }
 
@@ -1474,6 +1527,14 @@ function writeRememberRaw(live, dir, args) {
   }
   if (kind === 'self') {
     if (!features.self?.rec) return { text: '人设的记录关掉了，这条没写。' }
+    // A trait that opens with an imperative is a rule, and rules get executed as
+    // performance. Refuse it once, and say what to write instead — the model can
+    // try again in its own words.
+    if (!args.hard && looksLikeRule(args.text)) {
+      return {
+        text: '这条读起来像规矩（「要…」「不要…」），不像我看见的自己。写成当时我做了什么、当时是什么感觉，再发一次；如果它真的是规矩，那属于 AGENTS.md，不属于这里。',
+      }
+    }
     if (args.label) {
       const label = String(args.label).trim()
       const found = store.self.find((x) => x.kind === 'trait' && x.label === label)
@@ -1742,7 +1803,7 @@ function recallKickText() {
     '【回忆整理】用户按了面板上的「回忆并写入」。现在停下别的事，做一次回忆。',
     '不要向我复述我们聊过什么，也不要总结这段对话——我要的不是摘要，是你从这段相处里真正记住的东西。',
     '按下面四类，每一条都调一次 persona_remember：',
-    '1. kind=self —— 我的脾气：反复出现的倾向。label 一两个词、intensity 1–5、text 一句行为描述；同一种倾向只写一条。',
+    '1. kind=self —— 我的脾气：反复出现的倾向。label 一两个词、intensity 1–5、text 写当时的我看见的自己（「我习惯先把话拆成条件再答」），不要写成规矩（「要…」「不要…」——那种被拦，也不该写在这里）；同一种倾向只写一条。',
     '2. kind=self 且 hard=true —— 不可改的规矩：明确的禁止、必须、称呼、口癖。text 照原话抄，不要改写。',
     '3. kind=user —— 我对你的画像：你的处境、习惯、偏好、禁忌、说话方式。写你这个人；不要把「我」的性格塞进画像，不确定的不写。',
     '4. kind=event —— 约定与时刻：约好的事带上 date，做到一半的事、值得留住的瞬间（eventKind=precious 或 work）也写。',

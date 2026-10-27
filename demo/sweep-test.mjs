@@ -91,8 +91,10 @@ ok('prompt has the agent name', prompt.includes('测试酱'))
 ok('hard rule printed before the trait', prompt.indexOf('绝不替我做主') < prompt.indexOf('温和'))
 ok('prompt stays inside the budget', prompt.length <= 35000, prompt.length)
 ok('prompt sends cross-workspace lessons to AGENTS.md', prompt.includes('AGENTS.md'))
-ok('prompt lets the diary carry technical notes', /对以后的我重要[\s\S]*?diary/.test(prompt))
-ok('prompt leaves "important" to my own judgement', /什么算重要[\s\S]*?自己判断/.test(prompt))
+ok('prompt sends engineering lessons to AGENTS.md', /工程上的坑与教训归 AGENTS\.md/.test(prompt))
+ok('prompt asks who I see myself as, not what I should be', /「我看见的我」，还是「我应该是的我」/.test(prompt))
+ok('prompt no longer gates a trait on seeing it twice', !/同一倾向出现两次|重复出现两次/.test(prompt))
+ok('prompt ends with questions, after the material', prompt.indexOf('### 先看三眼') > prompt.indexOf('### 我在这里的样子') || !prompt.includes('### 我在这里的样子'))
 
 // The standing section must be byte-identical between turns: a line that
 // changes (today's date, a day count) would invalidate the prompt cache for
