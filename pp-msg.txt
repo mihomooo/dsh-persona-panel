@@ -1,20 +1,3 @@
-feat: put recording first and make the prompt say what to notice
+fix: keep the prompt cache intact by dating the debt line only once per session
 
-The model rarely wrote anything: the section opened with a run of "don't"
-rules and only asked for a record near the bottom, in a wording that never
-matched a moment it could recognise.
-
-- the recording rule now opens the section, as a four-item check before
-  answering a turn (something agreed or dated / a mood that moved / work
-  that finished / a line worth keeping) — with "no need to record" spelled
-  out so it does not start recording noise
-- one short entry while it is fresh beats saving it up, and every entry
-  carries evidence, so an entry keeps its origin
-- the four drawers are named with their fields in one line each, so the
-  choice of kind stops being a decision
-- a new debt line appears only when the newest write is a day old or more:
-  "上一笔落在 N 天前；这中间聊过的事，现在还想得起来的，就补一条"
-- the prohibition cluster moved below the ask, so correct-but-silent still
-  wins over narrating the mechanism
-- tool description opens with the same four-item check and the fact that
-  nothing is recorded unless the tool runs
+The debt line carries a day count, so its text changes every midnight. Inside the system prompt that invalidates every cached token after it, including the whole conversation. A new session is a fresh prefix anyway, so the line now rides with the diary opening on the first turn only.

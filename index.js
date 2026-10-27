@@ -870,8 +870,12 @@ function renderPrompt(db, dir, opts = {}) {
   // explicitly and names the words that must never surface.
   const lastAt = latestStamp([...store.event, ...(store.diary || [])])
   const gapDays = lastAt ? Math.floor((Date.now() - Date.parse(lastAt)) / 86400000) : 0
-  const debt = lastAt && gapDays >= 1
-    ? `- 上一笔落在 ${gapDays >= 1 ? `${gapDays} 天前` : '今天'}；这中间聊过的事，现在还想得起来的，就补一条进来。`
+  // Only on the first turn of a session: a line whose text changes would
+  // invalidate the prompt cache from that point on, and the conversation
+  // after it is the expensive part. A new session is already a fresh prefix,
+  // so the debt costs nothing there.
+  const debt = opts.freshSession && lastAt && gapDays >= 1
+    ? `- 上一笔落在 ${gapDays} 天前；这中间聊过的事，现在还想得起来的，就补一条进来。`
     : ''
   const head = [
     `## 背景：${agentName} 在「${basename(normalizeDir(dir) || '')}」的底色`,
