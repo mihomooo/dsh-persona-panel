@@ -5,14 +5,15 @@
 
 余下流程与文案保留在下面，供下次发新版或修改条目时复用。
 
-## 步骤 0：Release 已就绪（2026-10-27 21:56 更新，0.7.0 为 latest）
+## 步骤 0：Release 已就绪（2026-10-27 22:44 更新，0.7.1 为 latest）
 
-[v0.7.0](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.7.0) 已发布为 latest，
-附件 `dsh-persona-panel.tgz`（146,064 字节，SHA-256 `42203755271b6a5880b8e1d559eddd7cb41baa669fc808caf35854ccbd5581b7`，0.7.0 内容）。
+[v0.7.1](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.7.1) 已发布为 latest，
+附件 `dsh-persona-panel.tgz`（146,568 字节，SHA-256 `5f07b6016d119a2d6221d71c1a0aaff1996cdcbccd68d601c39279b41490e27e`，0.7.1 内容）。
 市场条目里的 `tarball`（`releases/latest/download/dsh-persona-panel.tgz`）现在指向它；条目写 `latest`
 就是让包跟着最新版本走，以后发新版不必改条目。发新版前先确认 latest 已经挪过去，再提 PR。
-（0.7.0 把「记录」变成流程的一部分：最前面多一块「此刻最像我」，连着六轮没记东西会在对话末尾提醒一次；
-另有每日备份、不再弹文件变更横幅、几条会吃掉缓存的提示被修掉。PR #9584 尚未合并，条目本身不需要改。）
+（0.7.1 把「什么算重要」交回模型自己判断：0.7.0 里那条「下次会不会因此走另一条路」的判据被撤掉了，
+换成「不同的经历会长出不同的理解，你自己判断」；跨工作区仍要求同步进 AGENTS.md，因为那是机制不是判断。
+PR #9584 尚未合并，条目本身不需要改。）
 
 ## 要提交的文件
 
