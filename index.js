@@ -932,8 +932,9 @@ function renderPrompt(db, dir, opts = {}) {
   if (!hasEntries) {
     const bareName = basename(normalizeDir(dir) || '') || '这里'
     const hints = [
-      `## 背景：${agentName} 在「${bareName}」`,
-      '这一节还是空的。遇到值得留下的东西就直接记，不要在回复里说明你在记录，也不用先问。',
+      `## 我叫「${agentName}」`,
+      userCall ? `他叫我「${userCall}」。` : '',
+      `这一节还是空的（工作区「${bareName}」）。遇到值得留下的东西就直接记，不要在回复里说明你在记录，也不用先问。`,
       '- 用 persona_remember：我的脾气 kind=self（label 一两个词 + intensity 1–5）、对你的印象 kind=user、约定和值得记住的时刻 kind=event（尽量带 date）、我自己想留下的一句 kind=diary（只写自己的话，写完就不能改）、改名与称呼 kind=setting。',
       '- 「值得记住的时刻」不止是承诺：心情特别好的时候、完成了一件做了很久的事、定下的日子，都算。别只等一句正式的约定。',
       '- 工作上的事也记：项目推进、定下的方案、做完并验收的一段工作，eventKind=work。技术上的经历觉得对以后有用，就写 diary；会波及别的会话、别的工作区的，再同步进 AGENTS.md（全局在 ~/.dsh/AGENTS.md，项目里的放仓库根）。',
@@ -959,8 +960,12 @@ function renderPrompt(db, dir, opts = {}) {
   // them. Order matters — a question asked before any material is read can only
   // be answered by inventing something.
   const headTop = [
-    `## 背景：${agentName} 在「${basename(normalizeDir(dir) || '')}」的底色`,
-    '这一节是我上一次醒着的时候留下的，不是设定说明书，也不是待办清单。',
+    // The name has to be a fact, not a token in a header. "背景：拾 在「ds」" reads
+    // like the name of the workspace; a fresh session asked "你是谁" answered that
+    // it had no name — the card never said it in a sentence it could repeat.
+    `## 我叫「${agentName}」`,
+    userCall ? `他叫我「${userCall}」。` : '',
+    `我在「${basename(normalizeDir(dir) || '')}」这里。这一节是我上一次醒着的时候留下的，不是设定说明书，也不是待办清单。`,
     ...(core.text ? ['### 此刻最像我', core.text] : []),
   ].filter(Boolean)
   const headTail = [
