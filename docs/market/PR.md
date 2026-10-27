@@ -5,15 +5,15 @@
 
 余下流程与文案保留在下面，供下次发新版或修改条目时复用。
 
-## 步骤 0：Release 已就绪（2026-10-27 22:44 更新，0.7.1 为 latest）
+## 步骤 0：Release 已就绪（2026-10-27 23:38 更新，0.7.2 为 latest）
 
-[v0.7.1](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.7.1) 已发布为 latest，
-附件 `dsh-persona-panel.tgz`（146,568 字节，SHA-256 `5f07b6016d119a2d6221d71c1a0aaff1996cdcbccd68d601c39279b41490e27e`，0.7.1 内容）。
+[v0.7.2](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.7.2) 已发布为 latest，
+附件 `dsh-persona-panel.tgz`（147,439 字节，SHA-256 `a93f9dbf47f75ad7c18bea8d1e02459280f2548cc14bf0e3023724009027166b`，0.7.2 内容）。
 市场条目里的 `tarball`（`releases/latest/download/dsh-persona-panel.tgz`）现在指向它；条目写 `latest`
 就是让包跟着最新版本走，以后发新版不必改条目。发新版前先确认 latest 已经挪过去，再提 PR。
-（0.7.1 把「什么算重要」交回模型自己判断：0.7.0 里那条「下次会不会因此走另一条路」的判据被撤掉了，
-换成「不同的经历会长出不同的理解，你自己判断」；跨工作区仍要求同步进 AGENTS.md，因为那是机制不是判断。
-PR #9584 尚未合并，条目本身不需要改。）
+（0.7.2 把提示词从「规定」改成「问句」：先摊材料、再问三句、最后才是写法；写自己时以「要…」「不要…」
+开头的 trait 会被宿主拦下，要求改写成「当时我做了什么」；提醒改成问句并按信号提前。0.7.1 则把
+「什么算重要」交回模型自己判断。PR #9584 尚未合并，条目本身不需要改。）
 
 ## 要提交的文件
 
