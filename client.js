@@ -292,7 +292,6 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false)
       const [ask, setAsk] = useState(null)
       const [cand, setCand] = useState([])
-      const [hideBanner, setHideBanner] = useState({})
 
       const apply = useCallback((next) => {
         if (!next || next.error) return
@@ -465,7 +464,7 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'pp-mid' },
             (data.orphans || [])
-              .filter((o) => (o.dir === data.dir || (o.storeId && o.storeId === data.storeId)) && !hideBanner[o.id])
+              .filter((o) => o.dir === data.dir || (o.storeId && o.storeId === data.storeId))
               .slice(0, 1)
               .map((o) =>
                 h(
@@ -500,8 +499,10 @@ window.__ModuleLoader__.load({
                     'button',
                     {
                       className: 'pp-iconbtn',
-                      title: '这个提示先收起来（档案还在人格档案里）',
-                      onClick: () => setHideBanner((m) => ({ ...(m || {}), [o.id]: true })),
+                      title: '这个提示以后不再出现（档案还在人格档案里）',
+                      onClick: async () => {
+                        await send({ op: 'dismissBanner', id: o.id })
+                      },
                     },
                     '×',
                   ),
@@ -1085,6 +1086,10 @@ window.__ModuleLoader__.load({
       const commit = async (key, patch) => {
         setFeat({ ...feat, [key]: { ...feat[key], ...patch } })
         await send({ op: 'settings', settings: { feature: { key, ...patch } } })
+        // The panel behind this modal draws its tabs from the same snapshot:
+        // without this, turning a kind off leaves its tab (and its entries)
+        // sitting there until something else refreshes.
+        if (reload) await reload()
       }
       return h(
         'div',

@@ -100,6 +100,17 @@ ok('client banner filters by workspace', client.includes('o.dir === data.dir'))
 ok('settings hands archives to the profiles panel', client.includes('人格档案'))
 ok('archive confirm names the profiles panel', client.includes('在「人格档案」里能找到'))
 
+// "×" on the banner is forever, not until the next panel mount — and it must
+// not take the archived set out of 人格档案.
+await call({ op: 'archive' })
+s = await snap()
+const goneId = s.orphans[0].id
+ok('a fresh archive shows its banner', s.orphans.length === 1, s.orphans.length)
+await call({ op: 'dismissBanner', id: goneId })
+s = await snap()
+ok('a dismissed banner stays gone', s.orphans.length === 0, s.orphans.length)
+ok('the dismissed set is still in the profile list', (s.profiles || []).some((p) => p.id === goneId), JSON.stringify((s.profiles || []).map((p) => p.id)))
+
 const bad = results.filter(([, pass]) => !pass).length
 console.log(`${results.length - bad}/${results.length} archive checks passed`)
 process.exit(bad ? 1 : 0)

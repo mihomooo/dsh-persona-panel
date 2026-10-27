@@ -131,8 +131,19 @@ const fixture = {
   token: 'abc',
 }
 
+const posts = []
 globalThis.fetch = async (url, opts) => {
-  if (opts && opts.method === 'POST') return { ok: true, status: 200, json: async () => fixture }
+  if (opts && opts.method === 'POST') {
+    let body = {}
+    try { body = JSON.parse(opts.body) } catch { body = { op: 'unparsed' } }
+    posts.push(body)
+    const f = body && body.settings && body.settings.feature
+    if (body.op === 'settings' && f && f.key) {
+      // Live fixture: what the host would remember is what the next GET returns,
+      // so reload() can be observed instead of assumed.
+      fixture.settings.features[f.key] = { ...(fixture.settings.features[f.key] || {}), on: f.on !== false, rec: f.rec !== false }
+    }
+  }
   return { ok: true, status: 200, json: async () => fixture }
 }
 globalThis.window = globalThis
@@ -327,17 +338,41 @@ for (const [name, def] of renderTargets) {
     const refresh = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('刷新'))
     if (refresh) refresh.props.onClick({ stopPropagation() {} })
     nodes = await settle()
-    // The archived banner is a reminder, not a fixture: it shows once, and the
-    // × actually puts it away.
+    // The archived banner is a reminder, not a fixture. "×" means never again:
+    // it has to reach the host, because the panel is remounted all the time.
     ok('an archived workspace gets a banner', textOf(nodes).includes('被归档了'), textOf(nodes).slice(0, 160))
     const bannerX = findNode(nodes, (n) => n.type === 'button' && String((n.children || []).join('')) === '×' && n.props && n.props.className === 'pp-iconbtn')
-    ok('the banner can be dismissed', !!bannerX)
+    ok('the banner offers a ×', !!bannerX)
     if (bannerX) {
+      posts.length = 0
       bannerX.props.onClick({ stopPropagation() {} })
       nodes = await settle()
-      ok('dismissing the banner puts it away', !textOf(nodes).includes('被归档了'), textOf(nodes).slice(0, 160))
+      ok('closing the banner tells the host to forget it', posts.some((p) => p.op === 'dismissBanner' && p.id === 'o9'), JSON.stringify(posts))
     }
     nodes = await settle()
+
+    // Turning a kind off inside 设置 must take its tab away immediately: the
+    // entries used to linger behind the modal until something else refreshed.
+    const tabNamed = (list, name) => !!findNode(list, (n) => n.type === 'button' && n.props && n.props.className === 'pp-tab' && String((n.children || []).join('')).startsWith(name))
+    ok('日记 tab is there to begin with', tabNamed(nodes, '日记'))
+    const settingsBtn = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('设置'))
+    if (settingsBtn) settingsBtn.props.onClick({ stopPropagation() {} })
+    nodes = await settle()
+    const diaryToggle = findNode(nodes, (n) => n.type === 'input' && n.props && n.props.key === 'diary-on')
+    ok('设置 offers a 日记 switch', !!diaryToggle)
+    if (diaryToggle) {
+      diaryToggle.props.onChange({ target: { checked: false } })
+      nodes = await settle()
+      ok('turning 日记 off sends the setting', posts.some((p) => p.op === 'settings' && p.settings && p.settings.feature && p.settings.feature.key === 'diary' && p.settings.feature.on === false), JSON.stringify(posts.slice(-2)))
+      ok('the 日记 tab leaves the panel at once', !tabNamed(nodes, '日记'))
+      const back = findNode(nodes, (n) => n.type === 'input' && n.props && n.props.key === 'diary-on')
+      if (back) back.props.onChange({ target: { checked: true } })
+      nodes = await settle()
+    }
+    const closeSettings = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('关闭'))
+    if (closeSettings) closeSettings.props.onClick({ stopPropagation() {} })
+    nodes = await settle()
+
     const open = findNode(nodes, (n) => n.type === 'button' && (n.children || []).includes('人格档案'))
     ok('the header offers the profiles panel', !!open)
     if (open) open.props.onClick({ stopPropagation() {} })
