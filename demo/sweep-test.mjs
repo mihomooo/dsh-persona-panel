@@ -90,7 +90,9 @@ const prompt = section.text({ agent: { session: { header: { cwd: dirA } } } })
 ok('prompt has the agent name', prompt.includes('测试酱'))
 ok('hard rule printed before the trait', prompt.indexOf('绝不替我做主') < prompt.indexOf('温和'))
 ok('prompt stays inside the budget', prompt.length <= 35000, prompt.length)
-ok('prompt sends lessons to AGENTS.md', prompt.includes('AGENTS.md'))
+ok('prompt sends cross-workspace lessons to AGENTS.md', prompt.includes('AGENTS.md'))
+ok('prompt lets the diary carry technical notes', /对以后的我重要[\s\S]*?diary/.test(prompt))
+ok('prompt leaves "important" to my own judgement', /什么算重要[\s\S]*?自己判断/.test(prompt))
 
 // The standing section must be byte-identical between turns: a line that
 // changes (today's date, a day count) would invalidate the prompt cache for
