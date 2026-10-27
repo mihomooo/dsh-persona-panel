@@ -92,8 +92,8 @@ ok('impression is whole', open.includes('喜欢安静'))
 const shown = (open.match(/^- 事件\d+/gm) || []).length
 ok('events open at 60% of 30', shown === 18)
 const diaryLines = (open.match(/^- \d{4}-\d{2}-\d{2} 第\d+天/gm) || []).length
-ok('diary opens with 21 lines', diaryLines === 21)
-ok('diary opens from the recent side', open.includes('第100天') && !open.includes('第70天'))
+ok('a wide budget opens most of the diary', diaryLines >= 90, diaryLines)
+ok('the newest diary line comes first', open.indexOf('第100天') >= 0 && open.indexOf('第100天') < open.indexOf('第70天'))
 
 const recall = async (args) => (await tools.persona_recall.execute(args, exec)).text
 const diaryCount = (text) => (text.match(/^- \d{4}-\d{2}-\d{2} 第\d+天/gm) || []).length

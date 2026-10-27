@@ -137,15 +137,16 @@ ok('older lines are read when the room allows', withOld.includes('两个月前�
 
 // And when the room does not allow: the recent window survives, the tail says
 // how much was dropped and where to look.
-for (let i = 0; i < 40; i += 1) await remember({ kind: 'diary', text: `第${i}条：`.padEnd(90, '字') })
+for (let i = 0; i < 120; i += 1) await remember({ kind: 'diary', text: `第${i}条：`.padEnd(400, '字') })
 const big = section.text({ agent: { id: 'session-5', session: { header: { cwd: dir } } } })
-ok('long diary is trimmed, not dumped', big.includes('只从最近往前放了') && big.length <= 2400)
-ok('the window is still the recent side', big.includes('第39条') && !big.includes('两个月前的一句旧话'))
+ok('long diary is trimmed, not dumped', big.includes('只从最近往前放了') && big.length <= 35000)
+ok('the window is still the recent side', big.includes('第119条') && !big.includes('两个月前的一句旧话'))
 
 // Recall, on the other hand, starts from the earliest — that is the direction to
 // walk when something has been forgotten.
 const oldest = (await tools.persona_recall.execute({}, exec)).text
-ok('recall lists the diary from the earliest', oldest.indexOf('两个月前的一句旧话') < oldest.indexOf('跟着松了一口气') && oldest.indexOf('两个月前的一句旧话') < oldest.indexOf('第39条'))
+const firstDiaryLine = (oldest.match(/^- \d{4}-\d{2}-\d{2} 第\d+条/m) || [''])[0]
+ok('recall lists the diary from the earliest', !!firstDiaryLine && oldest.indexOf('两个月前的一句旧话') < oldest.indexOf(firstDiaryLine), firstDiaryLine)
 
 // The first meeting has to ask about the diary too. It records from the very
 // first conversation and can never be edited or deleted afterwards, so a diary

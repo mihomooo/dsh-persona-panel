@@ -18,7 +18,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const ROUTE = '/persona-panel/api'
-const PROMPT_BUDGET_CHARS = 2400
+// The section that rides along on every turn is capped here. It is a choice,
+// not a model limit: the window holds far more. Raised on request (2026-10-27)
+// so a session can open with most of the drawer instead of a hint of it.
+const PROMPT_BUDGET_CHARS = 35000
 const STRENGTH = { 1: '一点', 2: '偏轻', 3: '中等', 4: '偏重', 5: '很重' }
 // Minted once per host start. The panel reads it from its first GET and sends
 // it back on every write; a request that never loaded the panel does not have
@@ -698,14 +701,18 @@ function dueEvents(events, days = 3) {
 // Diary: last three weeks, or the newest 21 lines if the last three weeks are
 // thin — a quiet month should not open with an empty diary.
 const DIARY_RECENT_DAYS = 21
-const DIARY_START_ENTRIES = 21
+// Ordering for a session start: the last three weeks first, then further back,
+// undated last. How many of them actually make it in is the budget's call —
+// with a small section that is roughly the old twenty-one lines; with a big one
+// it is most of the drawer.
 function diaryStartup(entries) {
   const now = Date.now()
   const rows = (entries || []).map((d, i) => ({ d, t: parseDay(d.date)?.getTime() ?? null, i }))
   rows.sort((a, b) => (b.t ?? 0) - (a.t ?? 0) || a.i - b.i)
   const recent = rows.filter((r) => r.t !== null && now - r.t <= DIARY_RECENT_DAYS * 86400000)
-  const picked = recent.length >= DIARY_START_ENTRIES ? recent.slice(0, DIARY_START_ENTRIES) : rows.slice(0, DIARY_START_ENTRIES)
-  return { picked: picked.map((r) => r.d), total: rows.length }
+  const older = rows.filter((r) => r.t !== null && now - r.t > DIARY_RECENT_DAYS * 86400000)
+  const undated = rows.filter((r) => r.t === null)
+  return { picked: [...recent, ...older, ...undated].map((r) => r.d), total: rows.length }
 }
 
 // Events: the fuller the drawer, the smaller the share a session start reads —
@@ -735,7 +742,7 @@ function fitDiary(entries, budget) {
   const lines = []
   let used = 0
   for (const d of entries) {
-    const line = `- ${d.date ? `${d.date} ` : ''}${d.text}`
+    const line = `- ${d.date ? `${d.date} ` : ''}${d.title ? `「${d.title}」` : ''}${d.text}`
     if (used + line.length + 1 > budget) break
     lines.push(line)
     used += line.length + 1
@@ -770,7 +777,7 @@ function renderPrompt(db, dir, opts = {}) {
     // and later turns carry only what is about to come due.
     if (opts.freshSession) {
       const win = eventWindow(store.event)
-      const lines = win.picked.map((e) => `- ${e.important ? '★ ' : ''}${e.text}${e.date ? ` · ${e.date}` : ''}`)
+      const lines = win.picked.map((e) => `- ${e.important ? '★ ' : ''}${e.title ? `「${e.title}」` : ''}${e.text}${e.date ? ` · ${e.date}` : ''}`)
       const tail = win.take < win.total ? `（共 ${win.total} 条，这一节先放 ${win.take} 条；其余的忘了再查。）` : ''
       parts.push(`### 我记着的事\n${lines.join('\n')}${tail ? `\n${tail}` : ''}`)
     } else {
@@ -862,6 +869,7 @@ function renderPrompt(db, dir, opts = {}) {
     '- 默认动作：每段真聊完（不是寒暄）都过一遍——有没有约好什么、值得留的时刻、心情起落、拖完的事。有就 event，写全日期 YYYY-MM-DD（今天 ' + todayStamp() + '），带上 title（十来个字的小标题）与 evidence（触发它的那句原文）；没有 evidence，以后就只剩一句没出处的话。',
     '- 日记不是作业，但没有配额不等于可以一直空着：聊到一句想留下的，就写 diary，别攒着，也别等提醒。',
     '- 事件和日记都不进这一节；觉得忘了什么就用 persona_recall 查，它给全量、不受这里的长短限制，只记得「跟猫有关」这种词就带 query 找。',
+    '- 什么时候该查：听到「上次」「之前」「我们说好的」「你还记得」这类话；只说出半截细节（日期、名字、当时的原话）；要替用户复述旧事；或者你自己的回复里出现「好像」「印象里」——先 persona_recall 再答，不要猜，也不要拿「我不记得了」糊过去。',
     '- 工作上发生的事也算事件（eventKind=work）：项目推进到哪一步、定下的方案、做完并验收的一段工作、交付的日子。',
     '- 工程上的发现另归别处：踩过的坑、发现的漏洞、以后要避免的做法——写进项目的 AGENTS.md 或仓库文档，不要塞进这里。',
     '- 不用在心里列「这条值不值得记」的清单，也不要把它写进回复当旁白：想记就记，记完接着说正事。',

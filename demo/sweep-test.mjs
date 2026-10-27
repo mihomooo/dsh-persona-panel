@@ -89,7 +89,7 @@ await tools.persona_remember.execute({ kind: 'self', label: '温和', intensity:
 const prompt = section.text({ agent: { session: { header: { cwd: dirA } } } })
 ok('prompt has the agent name', prompt.includes('测试酱'))
 ok('hard rule printed before the trait', prompt.indexOf('绝不替我做主') < prompt.indexOf('温和'))
-ok('prompt stays inside the budget', prompt.length <= 2400, prompt.length)
+ok('prompt stays inside the budget', prompt.length <= 35000, prompt.length)
 ok('prompt sends lessons to AGENTS.md', prompt.includes('AGENTS.md'))
 
 // --- user + event ----------------------------------------------------------
