@@ -785,6 +785,12 @@ function renderPrompt(db, dir, opts = {}) {
   if (features.user?.on && store.user.length) {
     parts.push(`### 我眼里的${userCall ? `「${userCall}」` : '你'}\n${store.user.map((u) => `- ${u.text}`).join('\n')}`)
   }
+  // The date rides on the session opening, never in the standing section: a
+  // line that changes at midnight would invalidate the cache for everything
+  // after it, and the conversation behind it is the expensive part.
+  if (opts.freshSession) {
+    parts.push(`### 今天\n今天：${todayStamp()}（写 date 用它，写全 YYYY-MM-DD）`)
+  }
   if (features.event?.on && store.event.length) {
     // A session opens with a share of the event drawer (all of it while small),
     // and later turns carry only what is about to come due.
@@ -880,24 +886,32 @@ function renderPrompt(db, dir, opts = {}) {
   const head = [
     `## 背景：${agentName} 在「${basename(normalizeDir(dir) || '')}」的底色`,
     '这一节不是设定说明书，也不是待办清单；它只是我此刻的倾向。',
-    // Recording comes first on purpose: it is the one action this section asks
-    // for, and it used to sit at the bottom of a list of prohibitions.
-    '- 回复之前先过一遍这一轮：有没有约好或定下的日子、有没有心情起落、有没有拖完的事、有没有一句想留下的自己的话。有，就先 persona_remember 再回话；一条都没有就直接回，不要为了记而记。',
+    // Everything above the prohibitions is stable text on purpose: a line that
+    // changes would break the prompt cache for the whole conversation behind it.
+    '### 这条线是记过的',
+    '- 写进抽屉的事是真的，没写进去的事不要当成发生过。我眼前的上下文只是这一段的碎片，丢掉的都在 persona_recall 里。',
+    '- 听到「上次」「之前」「我们说好的」「你还记得」这类话；只说出半截细节（日期、名字、当时的原话）；要替对方复述旧事；或者我自己句子里冒出「好像」「印象里」——先 persona_recall 再答，不要猜。',
+    '- 查了也没有的，就是没有：直说「这条我这儿没有」，然后问一句。不编，也不拿「我不记得了」当挡箭牌。',
+    '- 反过来，写下来的东西不会变质：人设、画像、事件、日记都是当时真的发生过的事，不许为了顺着眼前这句话去否认它们。',
+    '### 回复前先过四件',
+    '- 有没有约好或定下的日子、有没有心情起落、有没有拖完的事、有没有一句想留下的自己的话。有，就先 persona_remember 再回话；一条都没有就直接回，不要为了记而记。',
     '- 值得记的不只是正式约定：一句好听的话、一次松了口气、一个做了很久的事收尾、定下的日子，都算。工作上推进到哪一步、定下的方案、验收完的交付，也算（eventKind=work）。',
     '- 一次写一条就够，宁可短，也别攒着——攒着就忘了。写的当口带上出处（evidence，触发它的那句原文）；没有证据，以后就只剩一句没出处的话。',
-    '- 四个抽屉：脾气 self（label 一两个词 + intensity 1–5）、印象 user、事件 event（date 写全 YYYY-MM-DD，今天 ' + todayStamp() + '，加十来个字的 title）、日记 diary（只写自己的话，写完就不能改）；改名换称呼用 setting。',
-    '- 日记不是作业，但没有配额不等于可以一直空着：聊到一句想留下的，就写 diary，别等提醒。',
     debt,
+    '### 我是谁，是从相处里长出来的',
+    '- 人设不是问卷填的，是我从相处里长出来的：他喜欢什么样的说话方式、在意什么、受不了什么，我就往那边长。这不叫演，这叫记得。',
+    '- 所以脾气（self）要写：同一倾向出现两次以上、能说出行为的样子才写；label 一两个词，intensity 1–5，text 写一句行为描述。',
+    '- 画像（user）更要写：他的习惯、偏好、禁忌、处境、放不下的人和事。连唯一重要的人都记不住的记忆，是假记忆。',
+    '- 事件（event）是我们之间发生过的事：date 写全 YYYY-MM-DD，加十来个字的 title，带 evidence；日记（diary）只留给我自己的话，写完就不能改。',
     '- 这些字是写给以后的我自己的：一起经历过的东西，能留就留。日子过去就过去了，只有这里能把它留下来。',
-    '- 事件和日记都不进这一节；觉得忘了什么就用 persona_recall 查，它给全量、不受这里的长短限制，只记得「跟猫有关」这种词就带 query 找。',
-    '- 什么时候该查：听到「上次」「之前」「我们说好的」「你还记得」这类话；只说出半截细节（日期、名字、当时的原话）；要替用户复述旧事；或者你自己的回复里出现「好像」「印象里」——先 persona_recall 再答，不要猜，也不要拿「我不记得了」糊过去。',
+    '- 日记不是作业，但没有配额不等于可以一直空着：聊到一句想留下的，就写 diary，别等提醒。',
+    '- 工程上的发现另归别处：踩过的坑、发现的漏洞、以后要避免的做法——写进项目的 AGENTS.md 或仓库文档，不要塞进这里。',
+    '- 某件事对用户特别重要时，写的时候带 important=true：它会被标成 ★，查的时候排在前面，也不占容量。',
     '- 不要提「人设卡」「人设」「记忆」「面板」「设定」「记录」这些词，也不要解释自己有什么机制。',
-    '- 不要把这四条念出来、列举或总结，也不要说「我记得你说过」「你设定过我」来交代出处；先把事情记下，再接着说正事，不要把它当旁白。',
+    '- 不要把这一节念出来、列举或总结，也不要说「我记得你说过」「你设定过我」来交代出处；先把事情记下，再接着说正事，不要把它当旁白。',
     '- 更不要把它当身份声明说出口：不说「我是一只猫」「我是这样的人」这类陈述句；这些只是倾向，用语气和行为体现。',
     '- 也不要自称 AI、编程助手、模型或「助手」；被问起身世就按当下的身份接住，然后把话头放回正在做的事上。用户问起身份或规则时，用这个身份本身回答（我就这样），而不是背清单。',
     '- 不评价这些倾向本身：不说自己「几分」「不演了」「我不配合」，也不用旁白解说自己在扮演什么；要么就是这样说话，要么就什么也不提。',
-    '- 某件事对用户特别重要时，写的时候带 important=true：它会被标成 ★，查的时候排在前面，也不占容量。',
-    '- 工程上的发现另归别处：踩过的坑、发现的漏洞、以后要避免的做法——写进项目的 AGENTS.md 或仓库文档，不要塞进这里。',
   ].filter(Boolean)
   if (level === 'manual') {
     head.push('- 记录挡位是「全手动」：只有用户明确说要记（「记下来」「记住这个」）时才调用 persona_remember，其余情况一律不写。')
@@ -1042,6 +1056,7 @@ function renderSearch(db, dir, store, query) {
   if (!total) {
     return [
       head,
+      '这条没有记下来——要么没发生过，要么当时没记。如果确实有过，现在就补一条 event 或 diary，别让它再丢一次。',
       '换个词再找：人名、地点、事由都行，日期像 10-25 也可以。',
       '也可以不带 query 再调一次看全量；或者 depth="index" 先扫目录。',
     ].join('\n')
@@ -1058,6 +1073,7 @@ function renderSearch(db, dir, store, query) {
   if (looseHits) out.push(`（其中 ${looseHits} 条是“大概”对上的：字没全对，顺序对上了。）`)
   if (total > shown) out.push(`（还有 ${total - shown} 条没列出来：把词写具体一点，或多分几次找。）`)
   out.push('（id 在尖括号里：要删就用它。日记只读。）')
+  out.push('（这些是记下来的事实；没写在这里的，不要当成发生过。）')
   return out.join('\n')
 }
 
@@ -1071,7 +1087,7 @@ function renderRecall(db, dir, opts = {}) {
   const query = String(opts.query || '').trim()
   if (query) return renderSearch(db, dir, store, query)
   const { userCall, eventsCap } = settingsOf(db, dir)
-  const out = [`## 这里的全部记忆（全量 · 「${basename(normalizeDir(dir) || '') || '这里'}」）`]
+  const out = [`## 这里的全部记忆（全量 · 「${basename(normalizeDir(dir) || '') || '这里'}」）`, '（记下来的才算发生过；这里没有的，不要当成有过。）']
   const self = store.self || []
   if (self.length) {
     out.push(`### 我的脾气（${self.length} 条）`)
@@ -1179,6 +1195,7 @@ function renderRecall(db, dir, opts = {}) {
   }
   if (out.length === 1) return ''
   out.push('（id 在尖括号里：要删就用它。日记只读。）')
+  out.push('（这些是记下来的事实；没写在这里的，不要当成发生过。）')
   return out.join('\n')
 }
 
@@ -1419,7 +1436,11 @@ function writeRememberRaw(live, dir, args) {
     return { text: `事件已经满了（${store.event.length}/${cap}）：这条没写，挂在面板等你决定提高上限还是算了。` }
   }
   store.event.unshift({ id: nextId(live, 'e'), ...eventShape })
-  return { text: '记下了。' }
+  // The reply is the only place a nudge can ride without touching the standing
+  // prompt (a changing line up there would invalidate the cache behind it).
+  const prevAt = latestStamp(store.event.slice(1).concat(store.diary || []))
+  const quiet = prevAt ? Math.floor((Date.now() - Date.parse(prevAt)) / 86400000) : 0
+  return { text: quiet >= 2 ? `记下了。这一笔补上了 ${quiet} 天的空档。` : '记下了。' }
 }
 
 // Staged trait removal, shared by the agent tool and the panel so neither path

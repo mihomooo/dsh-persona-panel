@@ -92,6 +92,20 @@ ok('hard rule printed before the trait', prompt.indexOf('绝不替我做主') < 
 ok('prompt stays inside the budget', prompt.length <= 35000, prompt.length)
 ok('prompt sends lessons to AGENTS.md', prompt.includes('AGENTS.md'))
 
+// The standing section must be byte-identical between turns: a line that
+// changes (today's date, a day count) would invalidate the prompt cache for
+// the whole conversation behind it.
+const today = (() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})()
+const promptNext = section.text({ agent: { session: { header: { cwd: dirA } } } })
+ok('the standing prompt carries no date once the session is open', !promptNext.includes(today))
+ok('the standing prompt is stable between turns', section.text({ agent: { session: { header: { cwd: dirA } } } }) === promptNext)
+const recalled = (await tools.persona_recall.execute({}, execA)).text
+ok('recall says the drawer is the truth', recalled.includes('记下来的才算发生过'))
+ok('recall closes with the same contract', recalled.includes('没写在这里的，不要当成发生过'))
+
 // --- user + event ----------------------------------------------------------
 await tools.persona_remember.execute({ kind: 'user', text: '喜欢深夜写代码' }, execA)
 await tools.persona_remember.execute({ kind: 'event', text: '下周三交稿', date: '下周三', eventKind: 'promise' }, execA)

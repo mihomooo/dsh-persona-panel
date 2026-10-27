@@ -1,3 +1,27 @@
-fix: keep the prompt cache intact by dating the debt line only once per session
+feat: make the drawer the source of truth, and say so where it costs nothing
 
-The debt line carries a day count, so its text changes every midnight. Inside the system prompt that invalidates every cached token after it, including the whole conversation. A new session is a fresh prefix anyway, so the line now rides with the diary opening on the first turn only.
+The model had no contract with its own memory: nothing told it that the
+drawer is real, that a gap in the context is a reason to look, or that a
+memory found nowhere is not a memory to invent.
+
+The three places a contract can live without breaking the prompt cache:
+
+1. the standing section — stable text only, so the prefix never moves:
+   a truth clause (what is written happened, what is not written did not),
+   the moments that must trigger persona_recall, "if recall has nothing,
+   say you do not have it and ask instead of inventing", and the line that
+   written memories do not change to suit the sentence in front of me
+2. the session opening — diary, events, the date and the debt line, all of
+   which only ride on the first turn, where a new prefix is free
+3. the tool replies — recall now ends with the same contract, an empty
+   search says "this was not recorded; if it happened, write it now", and a
+   remember after a quiet stretch answers "这一笔补上了 N 天的空档"
+
+Also: how the persona is supposed to grow. The model is told to grow into
+what the user likes instead of inventing a character, that a trait needs
+two sightings, that the profile matters most (a memory that cannot hold
+the one person it lives with is fake), and that the diary is the proof the
+days existed.
+
+The date moved out of the standing section for the same cache reason; it
+now opens the session next to the events.
