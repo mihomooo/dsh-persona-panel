@@ -1,19 +1,25 @@
 # 投稿到 awesome-dsh-plugin
 
 **已提交：2026-10-26 → [PR #9584](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9584)**
-（1 commit / 1 file / +7；`mergeable=True`，`action_required` 是首次贡献者需要维护者点一次批准跑 CI，属正常。）
+（1 commit / 1 file / +7。维护者 `fkysly` 于 10-27 20:41Z 关闭该 PR，并**直接把条目落进主仓库 `main`**：
+说明是「分支与 main 冲突、CI 跑不了，按冲突流程直接落」，落地前核过 `dsh.bundle`、图标与 tarball 三项。
+落地文件与最终提交逐字节一致（`data/plugins/mihomooo__dsh-persona-panel.yml`，964 字节，`sha 48fe8def`）。
+`closed` 不等于被拒，也**不要重复提 PR**——条目已在 `main`，等站点重建即出现在市场。）
 
 余下流程与文案保留在下面，供下次发新版或修改条目时复用。
 
-## 步骤 0：Release 已就绪（2026-10-27 23:38 更新，0.7.2 为 latest）
+## 步骤 0：Release 已就绪（2026-10-28 17:25 更新，0.7.3 为 latest）
 
-[v0.7.2](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.7.2) 已发布为 latest，
-附件 `dsh-persona-panel.tgz`（147,439 字节，SHA-256 `a93f9dbf47f75ad7c18bea8d1e02459280f2548cc14bf0e3023724009027166b`，0.7.2 内容）。
+[v0.7.3](https://github.com/mihomooo/dsh-persona-panel/releases/tag/v0.7.3) 已发布为 latest，
+附件 `dsh-persona-panel.tgz`（147,836 字节，SHA-256 `f9d838f79c4b219f023ce4901a8cb4467caf8b9de2672142550d1ee61de59196`，0.7.3 内容）。
 市场条目里的 `tarball`（`releases/latest/download/dsh-persona-panel.tgz`）现在指向它；条目写 `latest`
 就是让包跟着最新版本走，以后发新版不必改条目。发新版前先确认 latest 已经挪过去，再提 PR。
-（0.7.2 把提示词从「规定」改成「问句」：先摊材料、再问三句、最后才是写法；写自己时以「要…」「不要…」
-开头的 trait 会被宿主拦下，要求改写成「当时我做了什么」；提醒改成问句并按信号提前。0.7.1 则把
-「什么算重要」交回模型自己判断。PR #9584 尚未合并，条目本身不需要改。）
+（0.7.3 把名字、称呼、工作区写成卡片第一行的三句陈述，并让新会话先接纳这些字再判断——之前它常
+把那批记忆当成「上一个会话的」，读到了也不用。0.7.2 把提示词从「规定」改成「问句」：先摊材料、
+再问三句、最后才是写法；以「要…」「不要…」开头的 self trait 会被宿主拦下。0.7.1 则把「什么算重要」
+交回模型自己判断。）
+（`releases/latest/download/…` 是 CDN 缓存的地址，刚发完版可能还取到上一版；要立刻核对就用 API 给的
+`assets[].browser_download_url`，那个不带缓存。）
 
 ## 要提交的文件
 
