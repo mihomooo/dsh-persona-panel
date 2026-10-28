@@ -137,15 +137,15 @@
 | 方式 | 怎么做 | 需要 git |
 |---|---|---|
 | Release 压缩包（推荐） | `dsh plugin --profile <profile> add https://github.com/mihomooo/dsh-persona-panel/releases/latest/download/dsh-persona-panel.tgz` | 不需要 |
+| npm | `dsh plugin --profile <profile> add dsh-persona-panel`（或 `npm i dsh-persona-panel`） | 不需要 |
 | 源码 | `dsh plugin --profile <profile> add https://github.com/mihomooo/dsh-persona-panel` | 需要 |
-| 插件市场 | 条目已提交（[PR #9584](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/9584)），合并后列表页可见 | — |
-| npm | **尚未发布**（账号在解冻中），现在别用这条 | — |
+| 插件市场 | 条目已在上游 `main`（[awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/data/plugins/mihomooo__dsh-persona-panel.yml)），站点重建后列表页可见 | — |
 
-两条都实测过（DSH 自带 CLI，pnpm v11）：压缩包 4.5 秒装完，源码走 `github:mihomooo/dsh-persona-panel`，装完会自动把 `dsh-persona-panel` 加进 profile 的 `dsh.profile.bundles`。升级就是再跑一次同样的命令（pnpm 会拉新的 latest）。
+压缩包与源码两条都实测过（DSH 自带 CLI，pnpm v11）：压缩包 4.5 秒装完，源码走 `github:mihomooo/dsh-persona-panel`，装完会自动把 `dsh-persona-panel` 加进 profile 的 `dsh.profile.bundles`。升级就是再跑一次同样的命令（pnpm 会拉新的 latest）。
 
 零依赖，没有构建脚本，装上去就是一个目录，不需要编译。
 
-**Discover 索引要 npm。** 市场列表本身是 GitHub 上的 yml，`dsh plugin add` 从 GitHub 装；但 DSH 应用里 **Plugins → Discover** 走的是 `dsh-plugin-catalog/index.json`，只收**已发布 npm 且有版本号**的条目。所以在 npm 发出去之前，这个插件不会出现在 Discover 的搜索结果里——列表页和安装命令都正常，只是搜不到。这是市场 README 写明的规则，不是我们这边缺东西。
+**npm 上的包与 Release 是同一份字节**：`dsh-persona-panel@0.7.3` 的 tarball 与 Release 附件 SHA-256 一致（`f9d838f7…de59196`）。有了 npm 版本之后，DSH 应用里的 **Plugins → Discover**（走 `dsh-plugin-catalog/index.json`，只收已发布 npm 的条目）也能搜到它。
 
 **升级不丢记忆**：数据在 `~/.dsh/persona-panel/`，卸载只撤程序。
 
