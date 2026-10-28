@@ -11,13 +11,26 @@
 4. 跑全套：`for f in demo/*-test.mjs; do node $f; done`，必须全绿。
 5. 提交并推：`git add -A && git commit -m ... && git push`。
 
-## 2. 打包
+## 2. 打包与发布到 npm
 
 ```powershell
 npm pack                                   # 产出 dsh-persona-panel-<版本>.tgz
 Move-Item -Force dsh-persona-panel-<版本>.tgz dsh-persona-panel.tgz
 (Get-FileHash dsh-persona-panel.tgz -Algorithm SHA256).Hash
+
+# 用临时 .npmrc 注入 token，别写进全局配置、别提交进仓库
+$token = (Get-Content -Raw "$env:USERPROFILE\npm-token.txt").Trim()
+$tmp = Join-Path $env:TEMP ('npmrc-' + [guid]::NewGuid().ToString('N'))
+[IO.File]::WriteAllText($tmp, ('//registry.npmjs.org/:_authToken=' + $token), (New-Object Text.UTF8Encoding($false)))
+npm publish --access public --userconfig $tmp
+Remove-Item $tmp -Force
 ```
+
+- 版本号发布后**不能覆盖**，再发必须先在 `package.json` 里升版本。
+- token 存 `~/.npm-token.txt`（granular，90 天，2026-10-28 建 → **2027-01-26 到期**）。到期只会让 CLI 报 401，已发布的包、版本、下载量都不受影响；届时重建一个 token 覆盖该文件即可。
+- 刚发完 `npm view` 可能先显示 `0.0.0-stage`（新包占位），等一两分钟再看真版本；`latest` 会指向真版本。
+- bypass-2FA 的 granular token **不能 unpublish**（会 403），要删版本得在网页上带 6 位码操作。
+- npm 已宣布 **2027 年 1 月起**取消 bypass-2FA token 的直接发布：到那之后要么用 stage-only token + `npm stage publish` 再人工批准，要么走 trusted publishing（CI OIDC）。
 
 **资产名不带版本号**：市场条目用 `releases/latest/download/dsh-persona-panel.tgz`，
 文件名带版本就会在下次发版时 404。
