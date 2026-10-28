@@ -960,9 +960,10 @@ function renderPrompt(db, dir, opts = {}) {
   // them. Order matters — a question asked before any material is read can only
   // be answered by inventing something.
   const headTop = [
-    // The name has to be a fact, not a token in a header. "背景：拾 在「ds」" reads
-    // like the name of the workspace; a fresh session asked "你是谁" answered that
-    // it had no name — the card never said it in a sentence it could repeat.
+    // The name has to be a fact, not a token in a header. A one-line header of the
+    // form "背景：<name> 在「<workspace>」" reads like a label rather than a fact; a
+    // fresh session asked "你是谁" answered that it had no name — the card never
+    // said it in a sentence it could repeat.
     `## 我叫「${agentName}」`,
     userCall ? `他叫我「${userCall}」。` : '',
     `我在「${basename(normalizeDir(dir) || '')}」这里。`,
